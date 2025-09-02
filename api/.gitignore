@@ -1,0 +1,114 @@
+# Laravel API - .gitignore
+
+# Laravel specific
+/vendor
+/node_modules
+/public/hot
+/public/storage
+/storage/*.key
+/storage/app/public/*
+!/storage/app/public/.gitkeep
+/storage/framework/cache/*
+!/storage/framework/cache/.gitkeep
+/storage/framework/sessions/*
+!/storage/framework/sessions/.gitkeep
+/storage/framework/testing/*
+!/storage/framework/testing/.gitkeep
+/storage/framework/views/*
+!/storage/framework/views/.gitkeep
+/storage/logs/*
+!/storage/logs/.gitkeep
+/bootstrap/cache/*
+!/bootstrap/cache/.gitkeep
+
+# Environment files
+.env
+.env.backup
+.env.production
+.env.local
+.env.testing
+
+# Composer
+composer.phar
+/vendor/
+composer.lock
+
+# Laravel Mix
+/public/mix-manifest.json
+
+# Laravel Nova
+/nova
+
+# Laravel Telescope
+/storage/telescope
+
+# Laravel Horizon
+/storage/horizon
+
+# Laravel Debugbar
+/storage/debugbar
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+laravel.log
+worker-debug.log
+queue-worker.log
+
+# PHP
+*.php~
+*.php.bak
+
+# Database
+*.sqlite
+*.sqlite3
+database.sqlite
+
+# Testing
+/coverage
+.phpunit.result.cache
+_ide_helper.php
+_ide_helper_models.php
+.phpstorm.meta.php
+
+# NPM/Yarn
+npm-debug.log
+yarn-error.log
+package-lock.json
+
+# Docker
+Dockerfile.local
+
+# Temporary files
+*.tmp
+*.temp
+
+# Backup files
+*.backup
+*.bak
+
+# PHPUnit
+phpunit.xml
+!phpunit.xml.dist
+
+# PHP CS Fixer
+.php_cs.cache
+.php-cs-fixer.cache
+
+# Psalm
+psalm.xml
+!psalm.xml.dist
+
+# PHPStan
+phpstan.neon
+!phpstan.neon.dist

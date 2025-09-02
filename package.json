@@ -1,0 +1,23 @@
+{
+  "name": "football-fantasy-manager",
+  "version": "1.0.0",
+  "description": "Full-stack Football Fantasy Manager with real-time match simulation",
+  "scripts": {
+    "start": "./start.sh",
+    "stop": "./stop.sh", 
+    "restart": "./restart.sh",
+    "dev": "./dev.sh",
+    "status": "./status.sh",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f",
+    "setup": "./setup.sh"
+  },
+  "keywords": ["football", "fantasy", "simulation", "laravel", "react", "typescript"],
+  "author": "Football Fantasy Team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=16.0.0",
+    "php": ">=8.1"
+  }
+}

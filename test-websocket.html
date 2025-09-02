@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Test</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+</head>
+<body>
+    <h1>WebSocket Connection Test</h1>
+    <div id="status">Connecting...</div>
+    <div id="logs"></div>
+    
+    <script>
+        const logs = document.getElementById('logs');
+        const status = document.getElementById('status');
+        
+        function log(message) {
+            console.log(message);
+            logs.innerHTML += '<div>' + new Date().toLocaleTimeString() + ': ' + message + '</div>';
+        }
+        
+        // Test connection to simulator
+        log('🔌 Attempting to connect to simulator...');
+        const socket = io('http://localhost:8001', {
+            transports: ['websocket', 'polling'],
+            timeout: 10000
+        });
+        
+        socket.on('connect', function() {
+            log('✅ Connected! Socket ID: ' + socket.id);
+            status.textContent = 'Connected: ' + socket.id;
+            
+            // Subscribe to a test simulation
+            const testJobId = 'test-' + Date.now();
+            log('📡 Subscribing to simulation: ' + testJobId);
+            socket.emit('subscribe-simulation', { jobId: testJobId });
+        });
+        
+        socket.on('subscribed', function(data) {
+            log('🔗 Subscription confirmed: ' + JSON.stringify(data));
+        });
+        
+        socket.on('simulation-update', function(update) {
+            log('📊 Simulation Update: ' + JSON.stringify(update));
+        });
+        
+        socket.on('simulation-complete', function(result) {
+            log('🏁 Simulation Complete: ' + JSON.stringify(result));
+        });
+        
+        socket.on('connect_error', function(error) {
+            log('❌ Connection Error: ' + error.message);
+            status.textContent = 'Connection Failed: ' + error.message;
+        });
+        
+        socket.on('disconnect', function(reason) {
+            log('🔌 Disconnected: ' + reason);
+            status.textContent = 'Disconnected: ' + reason;
+        });
+        
+        // Test button to trigger a real simulation
+        document.body.innerHTML += '<br><button onclick="triggerSimulation()">Trigger Real Simulation</button>';
+        
+        function triggerSimulation() {
+            log('🚀 Triggering simulation via API...');
+            fetch('http://localhost:8000/api/v1/simulator/simulate-async', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    home_team_id: 1,
+                    away_team_id: 2,
+                    weather: 'normal',
+                    stadium: 'WebSocket Test Stadium'
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const jobId = data.data.job_id;
+                    log('✅ Simulation started: ' + jobId);
+                    log('📡 Subscribing to real simulation...');
+                    socket.emit('subscribe-simulation', { jobId: jobId });
+                } else {
+                    log('❌ Failed to start simulation: ' + JSON.stringify(data));
+                }
+            })
+            .catch(error => {
+                log('❌ API Error: ' + error.message);
+            });
+        }
+    </script>
+</body>
+</html>

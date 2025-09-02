@@ -1,0 +1,121 @@
+# Match Simulator Microservice - .gitignore
+
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+*.lcov
+
+# nyc test coverage
+.nyc_output
+
+# Compiled TypeScript
+dist/
+build/
+lib/
+*.tsbuildinfo
+
+# Environment files
+.env
+.env.local
+.env.production
+.env.development
+.env.testing
+env.example.local
+
+# IDE and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+microservice.log
+microservice-debug.log
+microservice-detailed.log
+microservice-fixed.log
+simulator.log
+logs.txt
+nohup.out
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# parcel-bundler cache
+.cache
+.parcel-cache
+
+# TypeScript incremental compilation
+*.tsbuildinfo
+
+# Docker
+Dockerfile.local
+docker-compose.override.yml
+
+# Testing
+test-results/
+coverage/
+
+# Temporary files
+*.tmp
+*.temp
+tmp/
+temp/
+
+# PM2
+.pm2/
+
+# Socket.io
+socket.io-client/
+
+# RabbitMQ connection files
+rabbitmq-connection.json
+
+# Backup files
+*.backup
+*.bak
+
+# Development test files
+test.js
+*.test.local.*
