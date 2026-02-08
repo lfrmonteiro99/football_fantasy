@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\GameMatch;
+use App\Models\MatchEvent;
 use App\Services\Simulation\SimulationEngine;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class SimulationStreamController extends Controller
@@ -53,7 +55,8 @@ class SimulationStreamController extends Controller
                 $this->sendSSE('lineup', $lineupData);
 
                 // ── Minute-by-minute ticks ──────────────────────────────
-                $lastTick = null;
+                $lastTick  = null;
+                $allEvents = [];
 
                 foreach ($engine->simulate($match) as $tick) {
                     // Always emit the full minute tick.
@@ -61,6 +64,22 @@ class SimulationStreamController extends Controller
 
                     // Emit granular named events so the frontend can listen selectively.
                     $this->emitNamedEvents($tick);
+
+                    // Collect events for persistence
+                    foreach ($tick['events'] ?? [] as $event) {
+                        $allEvents[] = [
+                            'match_id'     => $match->id,
+                            'minute'       => $tick['minute'],
+                            'event_type'   => $event['type'],
+                            'team_type'    => $event['team'],
+                            'player_name'  => $event['primary_player_name'] ?? 'Unknown',
+                            'description'  => $event['description'] ?? '',
+                            'x_coordinate' => (int) ($event['coordinates']['x'] ?? 50),
+                            'y_coordinate' => (int) ($event['coordinates']['y'] ?? 50),
+                            'commentary'   => $tick['commentary'] ?? '',
+                            'sub_events'   => json_encode($event['sequence'] ?? []),
+                        ];
+                    }
 
                     // Detect phase-boundary events.
                     if ($tick['phase'] === 'half_time') {
@@ -90,6 +109,18 @@ class SimulationStreamController extends Controller
                         'score' => $lastTick['score'],
                         'stats' => $lastTick['stats'],
                     ]);
+                }
+
+                // ── Persist results after stream completes ────────────
+                if ($lastTick) {
+                    try {
+                        $this->saveMatchResults($match, $lastTick, $allEvents);
+                    } catch (\Throwable $e) {
+                        Log::error('Failed to save match results after simulation stream', [
+                            'match_id'  => $match->id,
+                            'exception' => $e->getMessage(),
+                        ]);
+                    }
                 }
             } catch (\Throwable $e) {
                 $this->sendSSE('error', [
@@ -127,14 +158,38 @@ class SimulationStreamController extends Controller
         $lineups = $this->buildLineupPayload($match);
 
         $minutes       = [];
+        $allEvents     = [];
         $finalScore    = ['home' => 0, 'away' => 0];
         $fullTimeStats = [];
+        $lastTick      = null;
 
         foreach ($engine->simulate($match) as $tick) {
             $minutes[] = $tick;
 
+            // Collect events for persistence
+            foreach ($tick['events'] ?? [] as $event) {
+                $allEvents[] = [
+                    'match_id'     => $match->id,
+                    'minute'       => $tick['minute'],
+                    'event_type'   => $event['type'],
+                    'team_type'    => $event['team'],
+                    'player_name'  => $event['primary_player_name'] ?? 'Unknown',
+                    'description'  => $event['description'] ?? '',
+                    'x_coordinate' => (int) ($event['coordinates']['x'] ?? 50),
+                    'y_coordinate' => (int) ($event['coordinates']['y'] ?? 50),
+                    'commentary'   => $tick['commentary'] ?? '',
+                    'sub_events'   => json_encode($event['sequence'] ?? []),
+                ];
+            }
+
             $finalScore    = $tick['score'];
             $fullTimeStats = $tick['stats'];
+            $lastTick      = $tick;
+        }
+
+        // Persist results to database
+        if ($lastTick) {
+            $this->saveMatchResults($match, $lastTick, $allEvents);
         }
 
         return response()->json([
@@ -147,6 +202,40 @@ class SimulationStreamController extends Controller
     }
 
     // ─── Private helpers ────────────────────────────────────────────────
+
+    /**
+     * Persist final match results and events to the database.
+     *
+     * @param GameMatch $match     The match being simulated.
+     * @param array     $finalTick The last tick from the simulation engine.
+     * @param array     $events    All accumulated match events.
+     */
+    private function saveMatchResults(GameMatch $match, array $finalTick, array $events): void
+    {
+        // Update the match record with final score, stats, and status
+        $match->update([
+            'home_score'  => $finalTick['score']['home'],
+            'away_score'  => $finalTick['score']['away'],
+            'status'      => 'completed',
+            'match_stats' => $finalTick['stats'],
+        ]);
+
+        // Delete any existing events for this match (in case of re-simulation)
+        MatchEvent::where('match_id', $match->id)->delete();
+
+        // Bulk insert events in chunks to avoid memory issues
+        if (!empty($events)) {
+            $now = now();
+            foreach (array_chunk($events, 100) as $chunk) {
+                MatchEvent::insert(
+                    array_map(fn ($e) => array_merge($e, [
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ]), $chunk)
+                );
+            }
+        }
+    }
 
     /**
      * Validate that the match has everything required to run a simulation.
