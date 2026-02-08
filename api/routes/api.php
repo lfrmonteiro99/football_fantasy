@@ -34,6 +34,7 @@ use Illuminate\Http\Request;
 use App\Http\Controllers\Api\MatchController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\TimeController;
+use App\Http\Controllers\Api\SimulationStreamController;
 
 Route::prefix('v1')->group(function () {
     
@@ -603,6 +604,10 @@ Route::prefix('v1')->group(function () {
     Route::get('tactics/{tactic}/analysis', [TacticController::class, 'analysis']);
 
 
+
+    // Tick-based simulation (new engine)
+    Route::post('matches/{match}/simulate-stream', [SimulationStreamController::class, 'simulateStream']);
+    Route::get('matches/{match}/simulate-instant', [SimulationStreamController::class, 'simulateInstant']);
 
     // Match Simulator routes
     Route::prefix('simulator')->group(function () {
