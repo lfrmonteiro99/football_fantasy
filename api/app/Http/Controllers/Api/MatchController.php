@@ -5,11 +5,15 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\League;
 use App\Models\GameMatch;
+use App\Models\MatchLineup;
+use App\Models\Player;
 use App\Models\Season;
 use App\Services\MatchSimulationService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 
 class MatchController extends Controller
 {
@@ -280,6 +284,306 @@ class MatchController extends Controller
                 'message' => $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * Get lineup selection for a match.
+     *
+     * Returns current lineup for both teams. If no lineup is stored yet,
+     * generates a suggested lineup based on the team's formation.
+     *
+     * @param GameMatch $match
+     * @return JsonResponse
+     */
+    public function getLineup(GameMatch $match): JsonResponse
+    {
+        $match->load(['homeTeam', 'awayTeam', 'homeFormation', 'awayFormation']);
+
+        $homeLineup = MatchLineup::where('match_id', $match->id)
+            ->where('team_id', $match->home_team_id)
+            ->with('player.attributes', 'player.primaryPosition')
+            ->orderBy('sort_order')
+            ->get();
+
+        $awayLineup = MatchLineup::where('match_id', $match->id)
+            ->where('team_id', $match->away_team_id)
+            ->with('player.attributes', 'player.primaryPosition')
+            ->orderBy('sort_order')
+            ->get();
+
+        // If no lineup exists, generate a suggested one
+        if ($homeLineup->isEmpty() && $match->homeFormation) {
+            $homeLineup = $this->suggestLineup($match->homeTeam, $match->homeFormation, $match->id);
+        }
+        if ($awayLineup->isEmpty() && $match->awayFormation) {
+            $awayLineup = $this->suggestLineup($match->awayTeam, $match->awayFormation, $match->id);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'data' => [
+                'home' => [
+                    'team' => $match->homeTeam,
+                    'formation' => $match->homeFormation,
+                    'starting' => $homeLineup->where('is_starting', true)->values(),
+                    'bench' => $homeLineup->where('is_starting', false)->values(),
+                ],
+                'away' => [
+                    'team' => $match->awayTeam,
+                    'formation' => $match->awayFormation,
+                    'starting' => $awayLineup->where('is_starting', true)->values(),
+                    'bench' => $awayLineup->where('is_starting', false)->values(),
+                ],
+            ],
+        ]);
+    }
+
+    /**
+     * Save lineup selection for a match.
+     *
+     * Accepts starting XI and bench players for a team and persists them.
+     *
+     * @param GameMatch $match
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function saveLineup(GameMatch $match, Request $request): JsonResponse
+    {
+        $request->validate([
+            'team_id' => 'required|integer',
+            'starting' => 'required|array|size:11',
+            'starting.*.player_id' => 'required|integer|exists:players,id',
+            'starting.*.position' => 'required|string|max:5',
+            'starting.*.x' => 'nullable|numeric|min:0|max:100',
+            'starting.*.y' => 'nullable|numeric|min:0|max:100',
+            'bench' => 'nullable|array|max:17',
+            'bench.*.player_id' => 'required|integer|exists:players,id',
+        ]);
+
+        $teamId = $request->input('team_id');
+
+        // Validate team is part of this match
+        if ($teamId != $match->home_team_id && $teamId != $match->away_team_id) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Team is not part of this match.',
+            ], 422);
+        }
+
+        $starting = $request->input('starting', []);
+        $bench = $request->input('bench', []);
+
+        // Collect all player IDs
+        $startingIds = array_column($starting, 'player_id');
+        $benchIds = array_column($bench, 'player_id');
+        $allPlayerIds = array_merge($startingIds, $benchIds);
+
+        // Check for duplicate player IDs
+        if (count($allPlayerIds) !== count(array_unique($allPlayerIds))) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Duplicate player IDs found. Each player can only appear once.',
+            ], 422);
+        }
+
+        // Verify all players belong to the team
+        $teamPlayerIds = Player::where('team_id', $teamId)->pluck('id')->toArray();
+        $invalidIds = array_diff($allPlayerIds, $teamPlayerIds);
+        if (!empty($invalidIds)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Players do not belong to the specified team: ' . implode(', ', $invalidIds),
+            ], 422);
+        }
+
+        // Validate exactly 1 GK in starting XI
+        $gkCount = 0;
+        foreach ($starting as $entry) {
+            if (strtoupper($entry['position']) === 'GK') {
+                $gkCount++;
+            }
+        }
+        if ($gkCount !== 1) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Starting XI must have exactly 1 goalkeeper (GK). Found: ' . $gkCount,
+            ], 422);
+        }
+
+        // Save lineup in a transaction
+        DB::transaction(function () use ($match, $teamId, $starting, $bench) {
+            // Remove existing lineup for this team in this match
+            MatchLineup::where('match_id', $match->id)
+                ->where('team_id', $teamId)
+                ->delete();
+
+            // Insert starting XI
+            foreach ($starting as $index => $entry) {
+                MatchLineup::create([
+                    'match_id' => $match->id,
+                    'team_id' => $teamId,
+                    'player_id' => $entry['player_id'],
+                    'position' => strtoupper($entry['position']),
+                    'is_starting' => true,
+                    'sort_order' => $index,
+                    'x' => $entry['x'] ?? null,
+                    'y' => $entry['y'] ?? null,
+                ]);
+            }
+
+            // Insert bench players
+            foreach ($bench as $index => $entry) {
+                $player = Player::find($entry['player_id']);
+                $position = $player && $player->primaryPosition
+                    ? $player->primaryPosition->short_name
+                    : 'SUB';
+
+                MatchLineup::create([
+                    'match_id' => $match->id,
+                    'team_id' => $teamId,
+                    'player_id' => $entry['player_id'],
+                    'position' => $position,
+                    'is_starting' => false,
+                    'sort_order' => 11 + $index,
+                    'x' => null,
+                    'y' => null,
+                ]);
+            }
+        });
+
+        // Return updated lineup in the same format as getLineup
+        return $this->getLineup($match);
+    }
+
+    /**
+     * Generate a suggested lineup based on team formation.
+     *
+     * Assigns the best-matching player (by primary position + current_ability) for each
+     * formation slot, then puts remaining players on the bench.
+     *
+     * @param \App\Models\Team $team
+     * @param \App\Models\Formation $formation
+     * @param int $matchId
+     * @return \Illuminate\Database\Eloquent\Collection
+     */
+    private function suggestLineup($team, $formation, int $matchId)
+    {
+        $players = $team->players()->with(['attributes', 'primaryPosition'])->get();
+        $positions = $formation->positions ?? [];
+        $assigned = [];
+        $lineupRecords = [];
+
+        // Position compatibility map (same as SimulationEngine)
+        $positionCompat = [
+            'GK' => ['GK'],
+            'CB' => ['CB', 'SW'],
+            'LB' => ['LB', 'WB'],
+            'RB' => ['RB', 'WB'],
+            'WB' => ['WB', 'LB', 'RB'],
+            'SW' => ['SW', 'CB'],
+            'DM' => ['DM', 'CM'],
+            'CM' => ['CM', 'DM', 'AM'],
+            'AM' => ['AM', 'CM'],
+            'LM' => ['LM', 'LW', 'AM'],
+            'RM' => ['RM', 'RW', 'AM'],
+            'LW' => ['LW', 'LM', 'AM'],
+            'RW' => ['RW', 'RM', 'AM'],
+            'ST' => ['ST', 'CF', 'F9'],
+            'CF' => ['CF', 'ST', 'F9'],
+            'F9' => ['F9', 'CF', 'ST', 'AM'],
+        ];
+
+        // Sort positions: GK first, then by y-coordinate
+        usort($positions, function ($a, $b) {
+            if ($a['position'] === 'GK') return -1;
+            if ($b['position'] === 'GK') return 1;
+            return ($a['y'] ?? 0) <=> ($b['y'] ?? 0);
+        });
+
+        // Assign best player for each formation slot
+        $sortOrder = 0;
+        foreach ($positions as $slot) {
+            $posAbbr = $slot['position'];
+            $compatibles = $positionCompat[$posAbbr] ?? [$posAbbr];
+
+            // Find best unassigned player compatible with this position
+            $bestPlayer = null;
+            $bestAbility = -1;
+
+            foreach ($players as $player) {
+                if (in_array($player->id, $assigned, true)) {
+                    continue;
+                }
+                if ($player->is_injured) {
+                    continue;
+                }
+
+                $primaryAbbr = $player->primaryPosition->short_name ?? '';
+                if (!in_array($primaryAbbr, $compatibles, true)) {
+                    continue;
+                }
+
+                $ability = $player->attributes->current_ability ?? 0;
+                if ($ability > $bestAbility) {
+                    $bestAbility = $ability;
+                    $bestPlayer = $player;
+                }
+            }
+
+            // Fallback: best unassigned non-injured player
+            if (!$bestPlayer) {
+                foreach ($players as $player) {
+                    if (in_array($player->id, $assigned, true) || $player->is_injured) {
+                        continue;
+                    }
+                    $ability = $player->attributes->current_ability ?? 0;
+                    if ($ability > $bestAbility) {
+                        $bestAbility = $ability;
+                        $bestPlayer = $player;
+                    }
+                }
+            }
+
+            if ($bestPlayer) {
+                $assigned[] = $bestPlayer->id;
+                $lineupRecords[] = MatchLineup::create([
+                    'match_id' => $matchId,
+                    'team_id' => $team->id,
+                    'player_id' => $bestPlayer->id,
+                    'position' => $posAbbr,
+                    'is_starting' => true,
+                    'sort_order' => $sortOrder++,
+                    'x' => $slot['x'] ?? null,
+                    'y' => $slot['y'] ?? null,
+                ]);
+            }
+        }
+
+        // Remaining players go to bench
+        foreach ($players as $player) {
+            if (in_array($player->id, $assigned, true)) {
+                continue;
+            }
+
+            $position = $player->primaryPosition->short_name ?? 'SUB';
+            $lineupRecords[] = MatchLineup::create([
+                'match_id' => $matchId,
+                'team_id' => $team->id,
+                'player_id' => $player->id,
+                'position' => $position,
+                'is_starting' => false,
+                'sort_order' => $sortOrder++,
+                'x' => null,
+                'y' => null,
+            ]);
+        }
+
+        // Reload all records with relationships
+        $ids = array_map(fn($r) => $r->id, $lineupRecords);
+        return MatchLineup::whereIn('id', $ids)
+            ->with('player.attributes', 'player.primaryPosition')
+            ->orderBy('sort_order')
+            ->get();
     }
 
     /**

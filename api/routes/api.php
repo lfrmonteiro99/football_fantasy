@@ -34,6 +34,7 @@ use Illuminate\Http\Request;
 use App\Http\Controllers\Api\MatchController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\TimeController;
+use App\Http\Controllers\Api\SimulationStreamController;
 
 Route::prefix('v1')->group(function () {
     
@@ -88,6 +89,8 @@ Route::prefix('v1')->group(function () {
         Route::get('/league', [MatchController::class, 'getLeagueMatches']);
         Route::get('/team', [MatchController::class, 'getTeamMatches']);
         Route::get('/upcoming', [MatchController::class, 'getUpcomingMatches']);
+        Route::get('/{match}/lineup', [MatchController::class, 'getLineup']);
+        Route::put('/{match}/lineup', [MatchController::class, 'saveLineup']);
         Route::get('/{id}', [MatchController::class, 'getMatchDetails']);
         Route::post('/{id}/simulate', [MatchController::class, 'simulateMatch']);
         Route::get('/{id}/ai-key-events', [MatchController::class, 'generateKeyEvents']);
@@ -603,6 +606,10 @@ Route::prefix('v1')->group(function () {
     Route::get('tactics/{tactic}/analysis', [TacticController::class, 'analysis']);
 
 
+
+    // Tick-based simulation (new engine)
+    Route::post('matches/{match}/simulate-stream', [SimulationStreamController::class, 'simulateStream']);
+    Route::get('matches/{match}/simulate-instant', [SimulationStreamController::class, 'simulateInstant']);
 
     // Match Simulator routes
     Route::prefix('simulator')->group(function () {
