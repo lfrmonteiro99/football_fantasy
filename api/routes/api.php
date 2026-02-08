@@ -89,6 +89,8 @@ Route::prefix('v1')->group(function () {
         Route::get('/league', [MatchController::class, 'getLeagueMatches']);
         Route::get('/team', [MatchController::class, 'getTeamMatches']);
         Route::get('/upcoming', [MatchController::class, 'getUpcomingMatches']);
+        Route::get('/{match}/lineup', [MatchController::class, 'getLineup']);
+        Route::put('/{match}/lineup', [MatchController::class, 'saveLineup']);
         Route::get('/{id}', [MatchController::class, 'getMatchDetails']);
         Route::post('/{id}/simulate', [MatchController::class, 'simulateMatch']);
         Route::get('/{id}/ai-key-events', [MatchController::class, 'generateKeyEvents']);

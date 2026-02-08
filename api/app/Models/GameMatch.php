@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Validation\ValidationException;
+use App\Models\MatchLineup;
 
 class GameMatch extends Model
 {
@@ -74,6 +75,14 @@ class GameMatch extends Model
     public function events(): HasMany
     {
         return $this->hasMany(MatchEvent::class, 'match_id');
+    }
+
+    /**
+     * Get the lineup entries for this match.
+     */
+    public function lineups(): HasMany
+    {
+        return $this->hasMany(MatchLineup::class, 'match_id');
     }
 
     // Scopes

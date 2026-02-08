@@ -77,6 +77,14 @@ class Player extends Model
     }
 
     /**
+     * Get the match lineup entries for this player.
+     */
+    public function matchLineups(): HasMany
+    {
+        return $this->hasMany(MatchLineup::class);
+    }
+
+    /**
      * Get the player's full name.
      */
     protected function fullName(): Attribute

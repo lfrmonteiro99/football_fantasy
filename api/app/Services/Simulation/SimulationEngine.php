@@ -6,6 +6,7 @@ namespace App\Services\Simulation;
 
 use App\Models\Formation;
 use App\Models\GameMatch;
+use App\Models\MatchLineup;
 use App\Models\Player;
 use App\Models\Position;
 use App\Models\Team;
@@ -109,6 +110,9 @@ class SimulationEngine
 
     /**
      * Load teams, formations, select starting XIs, and set up initial state.
+     *
+     * If stored MatchLineup records exist for a team, those are used instead
+     * of auto-selecting. This allows the user to pick their own Starting XI.
      */
     private function initializeMatch(GameMatch $match): void
     {
@@ -127,9 +131,15 @@ class SimulationEngine
         $this->state->homeFormation = $match->homeFormation;
         $this->state->awayFormation = $match->awayFormation;
 
-        // Select starting XIs
-        $this->selectLineup('home', $match->homeTeam, $match->homeFormation);
-        $this->selectLineup('away', $match->awayTeam, $match->awayFormation);
+        // --- Home team: try stored lineup first ---
+        if (!$this->loadStoredLineup($match, 'home')) {
+            $this->selectLineup('home', $match->homeTeam, $match->homeFormation);
+        }
+
+        // --- Away team: try stored lineup first ---
+        if (!$this->loadStoredLineup($match, 'away')) {
+            $this->selectLineup('away', $match->awayTeam, $match->awayFormation);
+        }
 
         // Designate set-piece takers
         $this->designateSetPieceTakers('home');
@@ -143,6 +153,80 @@ class SimulationEngine
         // Determine injury time
         $this->state->firstHalfInjuryTime = random_int(1, 4);
         $this->state->secondHalfInjuryTime = random_int(1, 5);
+    }
+
+    /**
+     * Attempt to load a stored lineup from the match_lineups table.
+     *
+     * If at least 11 starting entries exist, populates the lineup and bench
+     * from the stored data rather than auto-selecting.
+     *
+     * @param GameMatch $match
+     * @param string $side 'home'|'away'
+     * @return bool true if stored lineup was loaded, false to fall back to auto-select
+     */
+    private function loadStoredLineup(GameMatch $match, string $side): bool
+    {
+        $teamId = $side === 'home' ? $match->home_team_id : $match->away_team_id;
+
+        $storedLineup = MatchLineup::where('match_id', $match->id)
+            ->where('team_id', $teamId)
+            ->where('is_starting', true)
+            ->with('player.attributes', 'player.primaryPosition')
+            ->get();
+
+        if ($storedLineup->isEmpty() || $storedLineup->count() < 11) {
+            return false;
+        }
+
+        $lineup = [];
+        foreach ($storedLineup as $entry) {
+            if (!$entry->player) {
+                continue;
+            }
+            $lineup[$entry->player->id] = $entry->player;
+            $this->state->playerStates[$entry->player->id] = [
+                'fatigue' => 0.0,
+                'yellow_cards' => 0,
+                'is_sent_off' => false,
+                'is_subbed_off' => false,
+                'goals' => 0,
+                'assists' => 0,
+                'position' => $entry->position,
+            ];
+        }
+
+        // Remaining squad players go to bench
+        $team = $side === 'home' ? $match->homeTeam : $match->awayTeam;
+        $allPlayers = $team->players;
+        $startingIds = $storedLineup->pluck('player_id')->toArray();
+        $bench = [];
+
+        foreach ($allPlayers as $player) {
+            if (!in_array($player->id, $startingIds, true)) {
+                $bench[$player->id] = $player;
+                $primaryAbbr = $player->primaryPosition->short_name ?? 'CM';
+                $this->state->playerStates[$player->id] = [
+                    'fatigue' => 0.0,
+                    'yellow_cards' => 0,
+                    'is_sent_off' => false,
+                    'is_subbed_off' => false,
+                    'goals' => 0,
+                    'assists' => 0,
+                    'position' => $primaryAbbr,
+                ];
+            }
+        }
+
+        if ($side === 'home') {
+            $this->state->homeLineup = $lineup;
+            $this->state->homeBench = $bench;
+        } else {
+            $this->state->awayLineup = $lineup;
+            $this->state->awayBench = $bench;
+        }
+
+        return true;
     }
 
     /**
