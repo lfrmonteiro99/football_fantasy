@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useCallback, useState } from 'react';
+import React, { useEffect, useMemo, useCallback, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 
 import type {
@@ -33,6 +33,7 @@ import EventTimeline from '../components/match/EventTimeline';
 import { tickEventsToTimeline } from '../components/match/EventTimeline';
 import CommentaryFeed from '../components/match/CommentaryFeed';
 import { createSimulationStream } from '../api/endpoints';
+import { useSequencePlayer } from '../hooks/useSequencePlayer';
 
 // ---------------------------------------------------------------------------
 // Default / empty stats
@@ -366,13 +367,14 @@ const MatchLivePage: React.FC = () => {
   const homeStats: TeamMatchStats = currentTick?.stats?.home ?? EMPTY_STATS;
   const awayStats: TeamMatchStats = currentTick?.stats?.away ?? EMPTY_STATS;
 
-  // Build pitch players
+  // Build pitch players from lineup (formation positions)
   const basePlayers = useMemo(
     () => (lineupData ? buildPlayersFromLineup(lineupData) : []),
     [lineupData],
   );
 
-  const pitchPlayers = useMemo(
+  // Apply possession shift for the "idle" state (when no sequence is playing)
+  const possessionShiftedPlayers = useMemo(
     () =>
       applyPossessionShift(
         basePlayers,
@@ -382,13 +384,13 @@ const MatchLivePage: React.FC = () => {
     [basePlayers, currentTick?.possession, currentTick?.zone],
   );
 
-  // Ball position based on zone
-  const ballPosition = useMemo(() => {
+  // Fallback ball position based on zone (used when no sequence data)
+  const zoneBallRef = useRef<{ x: number; y: number }>({ x: 50, y: 50 });
+  const zoneBallPosition = useMemo(() => {
     if (!currentTick) return null;
     const zone = currentTick.zone;
     const possession = currentTick.possession;
 
-    // Map zone to rough ball position
     let bx = 50;
     let by = 50;
 
@@ -409,8 +411,30 @@ const MatchLivePage: React.FC = () => {
       by = 35 + Math.random() * 30;
     }
 
-    return { x: bx, y: by };
+    const pos = { x: bx, y: by };
+    zoneBallRef.current = pos;
+    return pos;
   }, [currentTick?.zone, currentTick?.possession, currentTick?.minute]);
+
+  // Sequence animation player — processes event sequences step-by-step
+  const currentEvents = currentTick?.events ?? [];
+  const {
+    players: seqPlayers,
+    ball: seqBall,
+    transitionDurationMs: seqTransition,
+    isAnimating: seqAnimating,
+    activePlayerId,
+  } = useSequencePlayer(
+    possessionShiftedPlayers,
+    currentEvents,
+    currentTick?.minute ?? -1,
+    speed !== 'instant', // disable animation in instant mode
+  );
+
+  // Use sequence-animated positions when available, else fall back to static
+  const pitchPlayers = seqAnimating ? seqPlayers : possessionShiftedPlayers;
+  const ballPosition = seqAnimating && seqBall ? seqBall : zoneBallPosition;
+  const pitchTransitionMs = seqAnimating ? seqTransition : 400;
 
   // Timeline events
   const timelineEvents = useMemo(
@@ -456,6 +480,8 @@ const MatchLivePage: React.FC = () => {
                 homeColor={homeColor}
                 awayColor={awayColor}
                 animated={true}
+                transitionDurationMs={pitchTransitionMs}
+                highlightedPlayerId={activePlayerId}
               />
             </div>
           </div>

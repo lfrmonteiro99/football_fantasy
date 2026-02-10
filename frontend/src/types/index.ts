@@ -517,6 +517,16 @@ export interface SubEvent {
   ball_end: { x: number; y: number } | number[];
 }
 
+/** A single animation step within an event's sequence array. */
+export interface SequenceStep {
+  action: string;         // 'pass' | 'shoot' | 'cross' | 'dribble' | 'tackle' | 'save' | 'header' | 'run' | 'clearance' | 'foul' | 'interception'
+  actor_id: number;
+  actor_name: string;
+  ball_start: { x: number; y: number };
+  ball_end: { x: number; y: number };
+  duration_ms: number;
+}
+
 /** Mirrors `match_lineups` table. */
 export interface MatchLineup {
   id: number;
@@ -999,11 +1009,14 @@ export interface SimulationTick {
 export interface SimulationTickEvent {
   type: MatchEventType;
   team: TeamSide;
+  primary_player_id?: number;
   primary_player_name: string | null;
+  secondary_player_id?: number;
   secondary_player_name: string | null;
+  outcome?: string;
   description: string;
   coordinates: { x: number; y: number };
-  sequence: unknown[];
+  sequence: SequenceStep[];
 }
 
 /** SSE `lineup` event data. */
