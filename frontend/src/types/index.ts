@@ -76,6 +76,7 @@ export type MatchEventType =
   | 'goal'
   | 'shot'
   | 'shot_on_target'
+  | 'shot_off_target'
   | 'save'
   | 'yellow_card'
   | 'red_card'
@@ -89,7 +90,15 @@ export type MatchEventType =
   | 'injury'
   | 'half_time'
   | 'full_time'
-  | 'kickoff';
+  | 'kickoff'
+  | 'dribble'
+  | 'tackle'
+  | 'interception'
+  | 'clearance'
+  | 'throw_in'
+  | 'goal_kick'
+  | 'header'
+  | 'possession';
 
 /** Simulation phase — maps to MatchState.phase. */
 export type SimulationPhase =
@@ -525,6 +534,8 @@ export interface SequenceStep {
   ball_start: { x: number; y: number };
   ball_end: { x: number; y: number };
   duration_ms: number;
+  target_id?: number;
+  target_name?: string;
 }
 
 /** Mirrors `match_lineups` table. */
@@ -996,6 +1007,7 @@ export interface SimulationTick {
   phase: SimulationPhase;
   possession: TeamSide;
   zone: string;             // 'def_home'|'mid'|'att_home' etc.
+  ball?: { x: number; y: number };
   events: SimulationTickEvent[];
   score: {
     home: number;

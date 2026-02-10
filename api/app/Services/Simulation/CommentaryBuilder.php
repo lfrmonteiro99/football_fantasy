@@ -186,6 +186,13 @@ class CommentaryBuilder
             "It's all over! {home_team} {home_score} - {away_score} {away_team}. What a match!",
             "The referee blows the final whistle. {home_team} {home_score} - {away_score} {away_team}.",
         ],
+        'possession' => [
+            "{team} work the ball around patiently, probing for an opening.",
+            "Nice passing sequence from {team}. They keep possession ticking over.",
+            "{team} dominate possession in this spell, moving the ball from side to side.",
+            "Measured build-up from {team} as they advance up the pitch.",
+            "{player} orchestrates the play as {team} maintain control.",
+        ],
         'quiet' => [
             "The ball is played around in midfield. {team} retain possession.",
             "Patient build-up play from {team}.",
@@ -315,14 +322,14 @@ class CommentaryBuilder
                 => 'penalty_miss',
 
             // Shot variants
+            $type === 'shot_on_target' && $outcome === 'blocked'
+                => 'shot_blocked',
             $type === 'shot_on_target' && $outcome === 'saved'
                 => 'shot_on_target',
             $type === 'shot_on_target'
                 => 'shot_on_target',
             $type === 'shot_off_target'
                 => 'shot_off_target',
-            $type === 'shot_on_target' && $outcome === 'blocked'
-                => 'shot_blocked',
 
             // Card variants
             $type === 'yellow_card'

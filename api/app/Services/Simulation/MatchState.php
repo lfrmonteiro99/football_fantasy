@@ -258,6 +258,7 @@ class MatchState
             'phase' => $this->phase,
             'possession' => $this->possession,
             'zone' => $this->zone,
+            'ball' => $this->ball,
             'events' => $events,
             'score' => $this->score,
             'stats' => [
