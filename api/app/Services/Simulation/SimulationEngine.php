@@ -433,6 +433,13 @@ class SimulationEngine
         // Each minute = a passage of play with 3-8 actions
         $actionCount = random_int(3, 8);
 
+        // Background passing: every minute has 4-8 passes regardless of what happens
+        // (represents the continuous ball circulation not shown as events)
+        $backgroundPasses = random_int(4, 8);
+        $this->state->stats[$this->state->possession]['passes'] += $backgroundPasses;
+
+        $lastActionWasPass = false;
+
         for ($i = 0; $i < $actionCount; $i++) {
             // What happens depends on context:
             // - If we have possession, likely: pass, dribble, or shoot (if in attacking third)
@@ -443,8 +450,8 @@ class SimulationEngine
             $roll = random_int(1, 100);
             $inAttackingThird = $this->isInAttackingThird($side);
 
-            if ($inAttackingThird && $roll <= 20) {
-                // In attacking third: 20% chance of shot attempt
+            if ($inAttackingThird && $roll <= 15) {
+                // In attacking third: 15% chance of shot attempt (was 20%)
                 $shotEvents = $this->resolveShot($side, null, $sequence);
                 $events = array_merge($events, $shotEvents);
                 $sequence = []; // reset after shot
@@ -455,20 +462,18 @@ class SimulationEngine
                 $events = array_merge($events, $foulEvents);
                 $sequence = [];
                 break;
-            } elseif ($roll <= 20) {
-                // 10% turnover (tackle or interception)
+            } elseif ($roll <= 25) {
+                // 15% turnover (tackle or interception) — was 10%
                 $defEvents = $this->simulateDefensiveAction();
                 $events = array_merge($events, $defEvents);
                 $sequence = [];
                 break;
-            } elseif ($roll <= 25) {
-                // 5% offside
-                if ($inAttackingThird) {
-                    $offEvents = $this->simulateOffside();
-                    $events = array_merge($events, $offEvents);
-                    $sequence = [];
-                    break;
-                }
+            } elseif ($roll <= 27 && $inAttackingThird && $lastActionWasPass) {
+                // 2% offside, only after a pass and in attacking third (was 5%)
+                $offEvents = $this->simulateOffside();
+                $events = array_merge($events, $offEvents);
+                $sequence = [];
+                break;
             }
 
             // Default: pass or carry (the bread-and-butter of football)
@@ -478,12 +483,14 @@ class SimulationEngine
                 $passerReceiver = $this->simulatePass($side, $sequence);
                 if ($passerReceiver) {
                     $sequence = $passerReceiver['sequence'];
+                    $lastActionWasPass = true;
                 }
             } else {
                 // Dribble/carry forward
                 $dribble = $this->simulateCarry($side, $sequence);
                 if ($dribble) {
                     $sequence = $dribble['sequence'];
+                    $lastActionWasPass = false;
                 }
             }
         }
@@ -1147,6 +1154,7 @@ class SimulationEngine
                     $this->buildSequenceAction('run', $interceptor, $ballPos, $newPos, random_int(200, 500)),
                 ];
                 $events[] = $this->buildEvent('interception', $defSide, $interceptor, null, 'success', $sequence);
+                $this->state->stats[$defSide]['tackles']++;
                 $this->state->ball = $newPos;
                 $this->state->possession = $defSide;
             }
@@ -1164,6 +1172,7 @@ class SimulationEngine
                     $this->buildSequenceAction('clearance', $clearer, $ballStart, $ballEnd, random_int(200, 400)),
                 ];
                 $events[] = $this->buildEvent('clearance', $defSide, $clearer, null, 'success', $sequence);
+                $this->state->stats[$defSide]['tackles']++;
                 $this->state->ball = $ballEnd;
                 $this->state->possession = $defSide;
             }
