@@ -8,50 +8,11 @@ import type {
   FormationPosition,
 } from '../types';
 
-// ---------------------------------------------------------------------------
-// Imports with safe fallbacks
-// ---------------------------------------------------------------------------
-
-let useAppSelector: any;
-let useAppDispatch: any;
-try {
-  const storeImport = require('../store');
-  useAppSelector = storeImport.useAppSelector;
-  useAppDispatch = storeImport.useAppDispatch;
-} catch {
-  useAppSelector = (selector: any) => selector({
-    match: { currentMatch: null, currentLineup: null, loading: 'idle', error: null },
-  });
-  useAppDispatch = () => (action: any) => action;
-}
-
-let fetchMatchDetails: any = (id: number) => ({ type: 'match/fetchDetails', payload: id });
-let fetchMatchLineup: any = (id: number) => ({ type: 'match/fetchLineup', payload: id });
-let saveMatchLineup: any = (args: any) => ({ type: 'match/saveLineup', payload: args });
-
-try {
-  const matchSlice = require('../store/matchSlice');
-  fetchMatchDetails = matchSlice.fetchMatchDetails ?? fetchMatchDetails;
-  fetchMatchLineup = matchSlice.fetchMatchLineup ?? fetchMatchLineup;
-  saveMatchLineup = matchSlice.saveMatchLineup ?? saveMatchLineup;
-} catch {
-  // keep stubs
-}
-
-let Button: React.FC<any>;
-let Spinner: React.FC<any>;
-let Card: React.FC<any>;
-try { Button = require('../components/common/Button').Button; } catch {
-  Button = ({ children, onClick, className, disabled, variant }: any) => (
-    <button onClick={onClick} className={className} disabled={disabled}>{children}</button>
-  );
-}
-try { Spinner = require('../components/common/Spinner').Spinner; } catch {
-  Spinner = () => <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full" />;
-}
-try { Card = require('../components/common/Card').Card; } catch {
-  Card = ({ children, className }: any) => <div className={className}>{children}</div>;
-}
+import { useAppSelector, useAppDispatch } from '../store';
+import { fetchMatchDetails, fetchMatchLineup, saveMatchLineup } from '../store/matchSlice';
+import Button from '../components/common/Button';
+import Spinner from '../components/common/Spinner';
+import Card from '../components/common/Card';
 
 import Pitch2D from '../components/match/Pitch2D';
 import type { Pitch2DPlayer } from '../components/match/Pitch2D';

@@ -9,90 +9,19 @@ import type {
   TeamMatchStats,
 } from '../types';
 
-// ---------------------------------------------------------------------------
-// Imports from other engineers — with local stubs if missing at compile-time
-// ---------------------------------------------------------------------------
-
-// Redux hooks — try real import, fall back to inline stubs
-let useAppSelector: any;
-let useAppDispatch: any;
-try {
-  const storeImport = require('../store');
-  useAppSelector = storeImport.useAppSelector;
-  useAppDispatch = storeImport.useAppDispatch;
-} catch {
-  // Minimal stubs so the file compiles even when store doesn't exist yet
-  useAppSelector = (selector: any) => selector({
-    match: {
-      currentMatch: null,
-      simulation: {
-        isRunning: false,
-        currentTick: null,
-        ticks: [],
-        lineupData: null,
-        finalScore: null,
-        finalStats: null,
-        error: null,
-      },
-      loading: 'idle',
-      error: null,
-    },
-  });
-  useAppDispatch = () => (action: any) => action;
-}
-
-// matchSlice actions — stub safe
-let fetchMatchDetails: any = (id: number) => ({ type: 'match/fetchDetails', payload: id });
-let addTick: any = (tick: any) => ({ type: 'match/addTick', payload: tick });
-let setLineupData: any = (data: any) => ({ type: 'match/setLineupData', payload: data });
-let setPhase: any = (phase: any) => ({ type: 'match/setPhase', payload: phase });
-let setSimulationRunning: any = (running: boolean) => ({ type: 'match/setSimulationRunning', payload: running });
-let setSimulationError: any = (err: string | null) => ({ type: 'match/setSimulationError', payload: err });
-let clearSimulation: any = () => ({ type: 'match/clearSimulation' });
-
-try {
-  const matchSlice = require('../store/matchSlice');
-  fetchMatchDetails = matchSlice.fetchMatchDetails ?? fetchMatchDetails;
-  addTick = matchSlice.addTick ?? addTick;
-  setLineupData = matchSlice.setLineupData ?? setLineupData;
-  setPhase = matchSlice.setPhase ?? setPhase;
-  setSimulationRunning = matchSlice.setSimulationRunning ?? setSimulationRunning;
-  setSimulationError = matchSlice.setSimulationError ?? setSimulationError;
-  clearSimulation = matchSlice.clearSimulation ?? clearSimulation;
-} catch {
-  // keep stubs
-}
-
-// Simulation hook — stub safe
-let useMatchSimulation: any;
-try {
-  useMatchSimulation = require('../hooks/useMatchSimulation').useMatchSimulation;
-} catch {
-  // Provide a no-op hook stub
-  useMatchSimulation = () => ({
-    start: (_matchId: number, _speed: SimulationSpeed) => {},
-    stop: () => {},
-    isActive: false,
-  });
-}
-
-// Common components — stub safe
-let Button: React.FC<any>;
-let Spinner: React.FC<any>;
-try {
-  Button = require('../components/common/Button').Button;
-} catch {
-  Button = ({ children, onClick, className, disabled }: any) => (
-    <button onClick={onClick} className={className} disabled={disabled}>
-      {children}
-    </button>
-  );
-}
-try {
-  Spinner = require('../components/common/Spinner').Spinner;
-} catch {
-  Spinner = () => <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full" />;
-}
+import { useAppSelector, useAppDispatch } from '../store';
+import {
+  fetchMatchDetails,
+  addTick,
+  setLineupData,
+  setPhase,
+  setSimulationRunning,
+  setSimulationError,
+  clearSimulation,
+} from '../store/matchSlice';
+import { useMatchSimulation } from '../hooks/useMatchSimulation';
+import Button from '../components/common/Button';
+import Spinner from '../components/common/Spinner';
 
 // Match components (from this engineer)
 import Pitch2D from '../components/match/Pitch2D';

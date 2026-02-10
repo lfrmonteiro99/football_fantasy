@@ -3,35 +3,9 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 
 import type { Match, TeamMatchStats } from '../types';
 
-// ---------------------------------------------------------------------------
-// Imports with safe fallbacks
-// ---------------------------------------------------------------------------
-
-let useAppSelector: any;
-let useAppDispatch: any;
-try {
-  const storeImport = require('../store');
-  useAppSelector = storeImport.useAppSelector;
-  useAppDispatch = storeImport.useAppDispatch;
-} catch {
-  useAppSelector = (selector: any) => selector({
-    match: { currentMatch: null, loading: 'idle', error: null },
-  });
-  useAppDispatch = () => (action: any) => action;
-}
-
-let fetchMatchDetails: any = (id: number) => ({ type: 'match/fetchDetails', payload: id });
-try {
-  const matchSlice = require('../store/matchSlice');
-  fetchMatchDetails = matchSlice.fetchMatchDetails ?? fetchMatchDetails;
-} catch {
-  // keep stub
-}
-
-let Spinner: React.FC<any>;
-try { Spinner = require('../components/common/Spinner').Spinner; } catch {
-  Spinner = () => <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full" />;
-}
+import { useAppSelector, useAppDispatch } from '../store';
+import { fetchMatchDetails } from '../store/matchSlice';
+import Spinner from '../components/common/Spinner';
 
 import ScoreBar from '../components/match/ScoreBar';
 import LiveStats from '../components/match/LiveStats';
