@@ -1,16 +1,11 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { useSelector, useDispatch } from 'react-redux';
+import { useSelector } from 'react-redux';
 import { fetchSquad } from '../store/teamSlice';
+import { useAppDispatch } from '../store';
 import type { RootState } from '../types';
 import { formatCurrency } from '../utils/helpers';
 import PlayerList from '../components/squad/PlayerList';
 import PlayerDetail from '../components/squad/PlayerDetail';
-
-// ---------------------------------------------------------------------------
-// Typed dispatch helper (inline fallback if store/index.ts not created yet)
-// ---------------------------------------------------------------------------
-
-type AppDispatch = ReturnType<typeof useDispatch>;
 
 // ---------------------------------------------------------------------------
 // Stat card
@@ -69,7 +64,7 @@ const CurrencyIcon = () => (
 // ---------------------------------------------------------------------------
 
 const SquadPage: React.FC = () => {
-  const dispatch = useDispatch<AppDispatch>();
+  const dispatch = useAppDispatch();
   const { user } = useSelector((state: RootState) => state.auth);
   const { squad, squadStats, currentTeam, loading, error } = useSelector(
     (state: RootState) => state.team,

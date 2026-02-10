@@ -243,10 +243,10 @@ const MatchPreviewPage: React.FC = () => {
         // Bench player clicked — perform the swap
         const side = activeLineup[team];
         const starterIdx = side.starting.findIndex(
-          (l) => l.player_id === selectedStarterId,
+          (l: MatchLineup) => l.player_id === selectedStarterId,
         );
         const benchIdx = side.bench.findIndex(
-          (l) => l.player_id === playerId,
+          (l: MatchLineup) => l.player_id === playerId,
         );
 
         if (starterIdx >= 0 && benchIdx >= 0) {
@@ -296,13 +296,13 @@ const MatchPreviewPage: React.FC = () => {
   const handleSaveLineup = useCallback(async () => {
     if (!activeLineup) return;
 
-    const homeStarting = activeLineup.home.starting.map((l) => ({
+    const homeStarting = activeLineup.home.starting.map((l: MatchLineup) => ({
       player_id: l.player_id,
       position: l.position,
       x: l.x,
       y: l.y,
     }));
-    const homeBench = activeLineup.home.bench.map((l) => ({
+    const homeBench = activeLineup.home.bench.map((l: MatchLineup) => ({
       player_id: l.player_id,
     }));
 
@@ -454,7 +454,7 @@ const MatchPreviewPage: React.FC = () => {
                 {homeTeam?.name ?? 'Home'} — Starting XI
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {activeLineup?.home?.starting?.map((ml) => {
+                {activeLineup?.home?.starting?.map((ml: MatchLineup) => {
                   const isSelected = selectedStarterId === ml.player_id;
                   return (
                     <button
@@ -490,7 +490,7 @@ const MatchPreviewPage: React.FC = () => {
                 Bench
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {activeLineup?.home?.bench?.map((ml) => (
+                {activeLineup?.home?.bench?.map((ml: MatchLineup) => (
                   <button
                     key={ml.player_id}
                     onClick={() => handleSwap(ml.player_id, false, 'home')}
@@ -528,7 +528,7 @@ const MatchPreviewPage: React.FC = () => {
                   {awayTeam?.name ?? 'Away'} — Starting XI
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {activeLineup.away.starting.map((ml) => (
+                  {activeLineup.away.starting.map((ml: MatchLineup) => (
                     <div
                       key={ml.player_id}
                       className="flex items-center gap-2 p-2 rounded-md bg-gray-700/50"

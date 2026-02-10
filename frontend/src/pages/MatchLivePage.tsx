@@ -488,7 +488,7 @@ const MatchLivePage: React.FC = () => {
   const timelineEvents = useMemo(
     () =>
       tickEventsToTimeline(
-        ticks.map((t) => ({ minute: t.minute, events: t.events })),
+        ticks.map((t: SimulationTick) => ({ minute: t.minute, events: t.events })),
       ),
     [ticks],
   );
