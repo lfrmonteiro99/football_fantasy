@@ -6,7 +6,7 @@ echo "=== Football Fantasy Manager API ==="
 # Install dependencies if vendor is missing
 if [ ! -d /app/vendor ] || [ ! -f /app/vendor/autoload.php ]; then
     echo "Installing PHP dependencies..."
-    composer install --no-dev --optimize-autoloader
+    composer install --optimize-autoloader
 fi
 
 # Create .env if missing

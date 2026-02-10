@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y \
     unzip \
     sqlite3 \
     libsqlite3-dev \
-    && docker-php-ext-install pdo_sqlite mbstring exif pcntl bcmath gd \
+    && docker-php-ext-install pdo_sqlite mbstring exif pcntl bcmath gd sockets \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install Composer
@@ -21,7 +21,7 @@ WORKDIR /app
 
 # Copy composer files and install deps (cached layer)
 COPY composer.json composer.lock ./
-RUN composer install --no-dev --optimize-autoloader --no-scripts
+RUN composer install --optimize-autoloader --no-scripts
 
 # Copy application code
 COPY . .
