@@ -23,6 +23,8 @@ export interface Pitch2DProps {
   homeColor?: string;
   awayColor?: string;
   animated?: boolean;
+  /** Transition duration in ms — overrides the default 400ms when animated=true. */
+  transitionDurationMs?: number;
   onPlayerClick?: (playerId: number) => void;
   className?: string;
   highlightedPlayerId?: number | null;
@@ -38,6 +40,7 @@ const Pitch2D: React.FC<Pitch2DProps> = ({
   homeColor = '#3b82f6',
   awayColor = '#ef4444',
   animated = false,
+  transitionDurationMs = 400,
   onPlayerClick,
   className = '',
   highlightedPlayerId = null,
@@ -59,9 +62,10 @@ const Pitch2D: React.FC<Pitch2DProps> = ({
     [ball],
   );
 
-  const transitionStyle = animated
-    ? 'transition: all 0.4s ease;'
-    : '';
+  const transitionSec = (transitionDurationMs / 1000).toFixed(2);
+  const transitionCss = animated
+    ? `all ${transitionSec}s ease`
+    : 'none';
 
   return (
     <svg
@@ -145,9 +149,7 @@ const Pitch2D: React.FC<Pitch2DProps> = ({
             key={p.id}
             style={{
               cursor: onPlayerClick ? 'pointer' : 'default',
-              ...(animated
-                ? { transition: 'all 0.4s ease' }
-                : {}),
+              transition: transitionCss,
               transform: `translate(${p.svgX}px, ${p.svgY}px)`,
             }}
             onClick={() => onPlayerClick?.(p.id)}
@@ -223,7 +225,7 @@ const Pitch2D: React.FC<Pitch2DProps> = ({
           fill="white"
           stroke="#222"
           strokeWidth="0.3"
-          style={animated ? { transition: 'all 0.4s ease' } : {}}
+          style={{ transition: transitionCss }}
         />
       )}
     </svg>
