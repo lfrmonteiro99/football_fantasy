@@ -412,7 +412,6 @@ const MatchLivePage: React.FC = () => {
       // Cleanup: abort on unmount
       if (abortFn) abortFn();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Handle speed change

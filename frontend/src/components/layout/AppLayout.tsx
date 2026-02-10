@@ -16,7 +16,7 @@ const AppLayout: React.FC = () => {
     if (!auth.user && auth.token) {
       dispatch(fetchProfile());
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   if (!auth.isAuthenticated && !auth.token) {
     return <Navigate to="/login" replace />;
