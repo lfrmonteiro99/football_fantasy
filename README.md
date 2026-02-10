@@ -1,191 +1,221 @@
-# ⚽ Football Fantasy Manager
+# Football Fantasy Manager
 
-A full-stack real-time football fantasy management application with AI-powered match simulation.
+A football (soccer) management simulation game. Pick a team, set your tactics and formation, select your starting XI, and watch matches unfold in real time with event-by-event streaming.
 
-## 🚀 Quick Start
+Built with a **Laravel API** backend and **React TypeScript** frontend, connected via **Server-Sent Events (SSE)** for live match simulation.
 
-### Option 1: Automatic Setup (Recommended)
+## Quick Start (Docker)
+
 ```bash
-# First time setup
-./setup.sh
-
-# Start the application
-./start.sh
+./docker.sh
 ```
 
-### Option 2: Development Mode
-```bash
-# Setup (if not done already)
-./setup.sh
+Open **http://localhost:3000**. That's it.
 
-# Start in development mode (opens multiple terminals)
-./dev.sh
-```
+No PHP, Node.js, or Composer needed locally. Only Docker.
 
-### Option 3: Docker
-```bash
-npm run docker:up
-```
+The container automatically installs dependencies, creates the database, runs migrations, and seeds it with Portuguese league teams (18 teams, 28 players each, full attribute sets).
 
-## 📋 Available Commands
+### Docker Commands
 
 | Command | Description |
 |---------|-------------|
-| `./setup.sh` | Initial setup (run once) |
-| `./start.sh` | Start all services |
-| `./stop.sh` | Stop all services |
-| `./restart.sh` | Restart all services |
-| `./dev.sh` | Development mode with live reload |
-| `./status.sh` | Check service status |
+| `./docker.sh` | Build and start everything |
+| `./docker.sh stop` | Stop all containers |
+| `./docker.sh restart` | Rebuild and restart |
+| `./docker.sh logs` | Follow all logs |
+| `./docker.sh logs api` | Follow API logs only |
+| `./docker.sh reset` | Fresh database (migrate + seed) |
+| `./docker.sh rebuild` | Full rebuild, no cache |
+| `./docker.sh status` | Show running containers |
 
-### NPM Scripts
+## Local Development
+
+Requires PHP 8.1+, Node.js 16+, and Composer (or Docker as fallback for Composer).
+
 ```bash
-npm run start        # Same as ./start.sh
-npm run stop         # Same as ./stop.sh
-npm run dev          # Same as ./dev.sh
-npm run status       # Same as ./status.sh
-npm run docker:up    # Start with Docker
-npm run docker:down  # Stop Docker containers
+./setup.sh          # First-time: install deps, create .env, migrate, seed
+./start.sh          # Start API + Frontend in background
+./stop.sh           # Stop all services
+./dev.sh            # Dev mode with live reload (separate terminals)
+./status.sh         # Check service status
+./restart.sh        # Stop + start
 ```
 
-## 🌐 Service URLs
+Or manually in two terminals:
 
-Once running, access the application at:
-
-- **Frontend**: http://localhost:3000
-- **Laravel API**: http://localhost:8000
-- **Microservice**: http://localhost:8001
-
-## 🏗️ Architecture
-
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│  React Frontend │───▶│   Laravel API   │───▶│ Match Simulator │
-│    (Port 3000)  │    │   (Port 8000)   │    │   (Port 8001)   │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-```
-
-### Components
-
-1. **React Frontend** - User interface with real-time match streaming
-2. **Laravel API** - Backend API with team/player management
-3. **Match Simulator** - Node.js microservice for real-time match simulation
-
-## 🔧 Development
-
-### Prerequisites
-- PHP 8.1+
-- Node.js 16+
-- Composer
-- npm
-
-### First Time Setup
 ```bash
-# Automatic setup
-./setup.sh
+# Terminal 1 - API (port 8000)
+cd api && composer install && php artisan migrate && php artisan db:seed && php artisan serve
 
-# Manual setup
-cd api && composer install && php artisan migrate --seed
-cd ../match-simulator && npm install && npm run build
-cd ../frontend && npm install
+# Terminal 2 - Frontend (port 3000)
+cd frontend && npm install && npm start
 ```
 
-### Development Workflow
+## Service URLs
+
+| Service | URL |
+|---------|-----|
+| Frontend | http://localhost:3000 |
+| API | http://localhost:8000 |
+| Nginx proxy (Docker only) | http://localhost:80 |
+
+## Features
+
+### Team Management
+- Select a team to manage from the Portuguese league
+- View full squad with detailed player attributes (64 attributes per player, 1-20 scale)
+- Attribute radar charts for individual player analysis
+
+### Tactics & Formation
+- Drag-and-drop formation editor (4-4-2, 4-3-3, 3-5-2, etc.)
+- Tactical settings: mentality, defensive line, pressing, passing style
+- Create and save multiple tactical presets
+- Assign players to positions
+
+### Match Day
+- **Starting XI selection** - pick your 11 starters and bench, swap players
+- **Live match simulation** - events stream in real time via SSE
+- **2D pitch visualization** - ball position and player zones update each minute
+- **Event timeline** - goals, cards, substitutions, fouls as they happen
+- **Live stats** - possession, shots, passes updated per tick
+- **Commentary feed** - contextual match commentary
+
+### Match Simulation Engine
+The simulation engine (`api/app/Services/Simulation/`) produces realistic football matches:
+
+- **Tick-based**: one game tick per match minute, streamed via SSE
+- **Causal event chains**: foul -> free kick, shot -> save -> corner, cross -> header -> goal
+- **Attribute-driven**: player selection based on 64 attributes (finishing, tackling, reflexes, pace, etc.)
+- **Fatigue model**: player stamina degrades over the match, affects performance
+- **Cards & discipline**: yellow/red cards with suspensions
+- **Substitutions**: 5-sub cap, tactical replacements
+- **Set pieces**: corners, free kicks, penalties with realistic outcomes
+
+### League
+- Full standings table computed from match results (W/D/L/GF/GA/GD/Pts)
+- Last 5 match form indicator
+- Match calendar with schedule and results
+
+## Architecture
+
+```
+football_fantasy/
+  api/                              # Laravel API (PHP 8.4)
+    app/
+      Http/Controllers/Api/         #   REST endpoints + SSE streaming
+      Models/                       #   Eloquent models
+      Services/Simulation/          #   Match simulation engine
+        SimulationEngine.php        #     Core tick-based engine (Generator/yield)
+        MatchState.php              #     Mutable game state
+        CommentaryBuilder.php       #     Event-to-text templates
+    database/
+      migrations/                   #   Schema definitions
+      seeders/                      #   Portuguese league data
+    docker-entrypoint.sh            #   Container startup (deps, migrate, seed, serve)
+  frontend/                         # React TypeScript
+    src/
+      api/                          #   Axios client + 60+ typed endpoint functions
+      components/
+        match/                      #   Pitch2D, EventTimeline, ScoreBar, LiveStats
+        squad/                      #   PlayerList, PlayerDetail, AttributeRadar
+        tactics/                    #   PitchEditor (drag-drop), TacticSettings
+        layout/                     #   AppLayout, Sidebar, Header
+      hooks/                        #   useMatchSimulation (SSE), useAuth, useGameTime
+      pages/                        #   9 pages (Login thru MatchResult)
+      store/                        #   Redux Toolkit slices
+      types/                        #   TypeScript interfaces (1,100+ lines)
+  docker-compose.yml                # API + Frontend + Nginx
+  docker.sh                         # One-command Docker launcher
+  setup.sh / start.sh / stop.sh     # Local dev scripts
+  nginx.conf                        # Reverse proxy with SSE support
+```
+
+## API Endpoints
+
+### Teams & Players
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/teams` | List all teams |
+| GET | `/api/v1/teams/{id}` | Team details |
+| GET | `/api/v1/teams/{id}/players` | Team squad with attributes |
+
+### Tactics & Formations
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/formations` | Available formations |
+| GET | `/api/v1/teams/{id}/tactics` | Team tactics |
+| POST | `/api/v1/tactics` | Create tactic |
+| PUT | `/api/v1/tactics/{id}` | Update tactic |
+
+### Matches & Simulation
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/matches` | Match list |
+| GET | `/api/v1/matches/{id}` | Match details |
+| GET | `/api/v1/matches/{id}/lineup` | Get/auto-suggest lineup |
+| PUT | `/api/v1/matches/{id}/lineup` | Save starting XI |
+| POST | `/api/v1/matches/{id}/simulate-stream` | **SSE** live simulation |
+| GET | `/api/v1/matches/{id}/simulate-instant` | Full simulation as JSON |
+
+### League
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/leagues/{id}/standings` | Standings with form |
+
+SSE event types: `lineup`, `minute`, `goal`, `card`, `half_time`, `full_time`
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Backend | Laravel 10, PHP 8.4, SQLite |
+| Frontend | React 18, TypeScript, Redux Toolkit |
+| Styling | Tailwind CSS |
+| Match Streaming | Server-Sent Events (SSE) |
+| Formation Editor | @dnd-kit (drag-and-drop) |
+| Charts | Recharts (player attribute radar) |
+| Routing | React Router v6 |
+| Containers | Docker, Docker Compose, Nginx |
+
+## Database
+
+SQLite with seeded data:
+- 18 Portuguese league teams
+- 28 players per team (504 total)
+- 64 attributes per player (1-20 scale)
+- Formations, tactics, match events, lineups
+
+Reset the database:
 ```bash
-# Start development servers
-./dev.sh
-
-# Check status
-./status.sh
-
-# View logs
-tail -f logs/*.log
-
-# Stop everything
-./stop.sh
+./docker.sh reset                           # Docker
+cd api && ./rollback_and_migrate.sh         # Local
 ```
 
-## 🚀 Production Deployment
-
-### Docker (Recommended)
-```bash
-docker-compose up -d
-```
-
-### Manual Deployment
-```bash
-# Production build
-cd frontend && npm run build
-cd ../match-simulator && npm run build
-
-# Start production servers
-./start.sh
-```
-
-## 📊 Performance & Scaling
-
-The application supports multiple concurrent users with:
-
-- **Load balancing** across multiple microservice instances
-- **Queue management** for high-load scenarios
-- **Health checks** and automatic failover
-- **Real-time streaming** with Server-Sent Events
-
-Configure scaling in `config/services.php`:
-```php
-'match_simulator' => [
-    'urls' => ['http://localhost:8001', 'http://localhost:8002', 'http://localhost:8003'],
-    'max_concurrent' => 9,
-    'load_balancer' => 'round_robin'
-]
-```
-
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Services won't start
 ```bash
-# Check what's using the ports
-./status.sh
-
-# Kill any conflicting processes
-./stop.sh
-
-# Restart
-./start.sh
+./status.sh                 # Check what's running
+./stop.sh                   # Kill existing processes
+./start.sh                  # Restart
 ```
 
 ### Database issues
 ```bash
-cd api
-php artisan migrate:fresh --seed
+./docker.sh reset                                   # Docker
+cd api && php artisan migrate:fresh --seed           # Local
 ```
 
-### Node.js issues
+### Docker build fails
 ```bash
-cd match-simulator && rm -rf node_modules && npm install
-cd ../frontend && rm -rf node_modules && npm install
+./docker.sh rebuild         # Full rebuild, no cache
 ```
 
-### View detailed logs
+### View logs
 ```bash
-# Real-time logs
-tail -f logs/api.log
-tail -f logs/microservice.log
-tail -f logs/frontend.log
-
-# Or use Docker logs
-npm run docker:logs
+./docker.sh logs            # Docker (all services)
+./docker.sh logs api        # Docker (API only)
+tail -f logs/api.log        # Local
+tail -f logs/frontend.log   # Local
 ```
-
-## 🎮 Features
-
-- ⚽ **Real-time Match Simulation** - Stream live matches with ball physics
-- 📊 **Live Statistics** - Possession, shots, tackles update in real-time
-- 🎯 **Tactical Management** - Change formations and tactics during matches
-- 👥 **Player Management** - Detailed player attributes and positioning
-- 🏆 **League System** - Portuguese league teams and realistic data
-- 🔄 **Auto-scaling** - Handles multiple concurrent users
-
-## 📝 License
-
-MIT License - see LICENSE file for details.
