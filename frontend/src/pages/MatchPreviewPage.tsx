@@ -279,7 +279,7 @@ const MatchPreviewPage: React.FC = () => {
         dispatch(
           saveMatchLineup({
             matchId,
-            payload: {
+            data: {
               team_id: activeLineup.home.team.id,
               starting: homeStarting,
               bench: homeBench,
