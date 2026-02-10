@@ -13,15 +13,36 @@ Football Fantasy Manager is a full-stack application with a Laravel API backend 
 
 ## Running the Project
 
-### Quick Start (root scripts)
+### Docker (recommended — no local dependencies needed)
+```bash
+./docker.sh                         # Build, migrate, seed, and start everything
+```
+That's it. Open `http://localhost:3000`. Only requires Docker installed.
+
+```bash
+./docker.sh stop                    # Stop all containers
+./docker.sh restart                 # Rebuild and restart
+./docker.sh logs                    # Follow all logs
+./docker.sh logs api                # Follow API logs only
+./docker.sh reset                   # Fresh database (migrate:fresh + seed)
+./docker.sh rebuild                 # Full rebuild from scratch (no cache)
+./docker.sh status                  # Show running containers
+```
+
+The API container entrypoint (`api/docker-entrypoint.sh`) automatically handles:
+composer install (if vendor/ missing), .env creation, app key generation, migrations, and database seeding.
+
+### Local Development (requires PHP, Node.js, Composer)
 ```bash
 ./setup.sh                          # First-time setup: installs deps, creates .env, migrates & seeds DB
-./start.sh                          # Start all services in background (API + Frontend), logs in ./logs/
+./start.sh                          # Start API + Frontend in background, logs in ./logs/
 ./stop.sh                           # Stop all running services
 ./restart.sh                        # Stop + start
 ./dev.sh                            # Start in dev mode (opens separate terminals with live reload)
 ./status.sh                         # Check which services are running
 ```
+
+If Composer is not installed locally, `setup.sh` falls back to running it via Docker container (`docker run composer:latest install`).
 
 After starting, open `http://localhost:3000`. The frontend proxies API requests to `localhost:8000`.
 
@@ -43,18 +64,12 @@ npm install                         # Install dependencies
 npm start                           # Start dev server (port 3000)
 ```
 
-### Docker
-```bash
-docker-compose up                   # Start all services (API, Frontend, Redis, RabbitMQ, Nginx)
-```
-
 ### Other Commands
 ```bash
 # Backend
 cd api
 ./rollback_and_migrate.sh           # Reset database completely (migrate + reseed)
 php artisan test                    # Run PHPUnit tests
-composer run dev                    # Start all services (server, queue, logs, vite)
 
 # Frontend
 cd frontend

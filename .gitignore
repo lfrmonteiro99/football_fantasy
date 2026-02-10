@@ -84,7 +84,7 @@ dist
 
 # Gatsby files
 .cache/
-public
+# Note: 'public' removed — was blocking frontend/public/index.html
 
 # Storybook build outputs
 .out
