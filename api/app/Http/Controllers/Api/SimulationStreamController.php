@@ -301,18 +301,92 @@ class SimulationStreamController extends Controller
             ])
             ->all();
 
+        $buildTeamLineup = function ($team, $formation) use ($match, $mapPlayers) {
+            // Try stored lineup first (user-selected starting XI)
+            $stored = \App\Models\MatchLineup::where('match_id', $match->id)
+                ->where('team_id', $team->id)
+                ->where('is_starting', true)
+                ->with('player.primaryPosition')
+                ->get();
+
+            if ($stored->isNotEmpty() && $stored->count() >= 11) {
+                $starters = $stored->map(fn ($entry) => $entry->player)->filter();
+                $starterIds = $starters->pluck('id')->toArray();
+            } else {
+                // Auto-select: use the engine's logic — pick best 11 by formation positions
+                $starterIds = $this->autoSelectStarterIds($team, $formation);
+                $starters = $team->players->filter(fn ($p) => in_array($p->id, $starterIds, true));
+            }
+
+            $subs = $team->players->filter(fn ($p) => !in_array($p->id, $starterIds, true));
+
+            return [
+                'team_name' => $team->name,
+                'formation' => $formation->name ?? null,
+                'starting'  => $mapPlayers($starters),
+                'subs'      => $mapPlayers($subs),
+            ];
+        };
+
         return [
-            'home' => [
-                'team_name' => $match->homeTeam->name,
-                'formation' => $match->homeFormation->name ?? null,
-                'starting'  => $mapPlayers($match->homeTeam->players),
-            ],
-            'away' => [
-                'team_name' => $match->awayTeam->name,
-                'formation' => $match->awayFormation->name ?? null,
-                'starting'  => $mapPlayers($match->awayTeam->players),
-            ],
+            'home' => $buildTeamLineup($match->homeTeam, $match->homeFormation),
+            'away' => $buildTeamLineup($match->awayTeam, $match->awayFormation),
         ];
+    }
+
+    /**
+     * Auto-select 11 starter IDs based on formation positions (mirrors SimulationEngine logic).
+     *
+     * @return int[]
+     */
+    private function autoSelectStarterIds(\App\Models\Team $team, \App\Models\Formation $formation): array
+    {
+        $positionCompat = [
+            'GK' => ['GK'], 'CB' => ['CB', 'SW'], 'LB' => ['LB', 'WB'], 'RB' => ['RB', 'WB'],
+            'WB' => ['WB', 'LB', 'RB'], 'SW' => ['SW', 'CB'], 'DM' => ['DM', 'CM'], 'CM' => ['CM', 'DM', 'AM'],
+            'AM' => ['AM', 'CM'], 'LM' => ['LM', 'LW', 'AM'], 'RM' => ['RM', 'RW', 'AM'],
+            'LW' => ['LW', 'LM', 'AM'], 'RW' => ['RW', 'RM', 'AM'],
+            'ST' => ['ST', 'CF', 'F9'], 'CF' => ['CF', 'ST', 'F9'], 'F9' => ['F9', 'CF', 'ST', 'AM'],
+        ];
+
+        $players = $team->players->all();
+        $positions = $formation->positions ?? [];
+        $assigned = [];
+
+        usort($positions, function ($a, $b) {
+            if ($a['position'] === 'GK') return -1;
+            if ($b['position'] === 'GK') return 1;
+            return ($a['y'] ?? 0) <=> ($b['y'] ?? 0);
+        });
+
+        foreach ($positions as $slot) {
+            $posAbbr = $slot['position'];
+            $compatibles = $positionCompat[$posAbbr] ?? [$posAbbr];
+
+            $candidates = array_filter($players, function ($p) use ($compatibles, $assigned) {
+                if (in_array($p->id, $assigned, true)) return false;
+                $primaryAbbr = $p->primaryPosition->short_name ?? '';
+                return in_array($primaryAbbr, $compatibles, true);
+            });
+
+            usort($candidates, fn ($a, $b) =>
+                ($b->attributes->current_ability ?? 0) <=> ($a->attributes->current_ability ?? 0)
+            );
+
+            if (!empty($candidates)) {
+                $assigned[] = $candidates[0]->id;
+            } else {
+                $remaining = array_filter($players, fn ($p) => !in_array($p->id, $assigned, true));
+                usort($remaining, fn ($a, $b) =>
+                    ($b->attributes->current_ability ?? 0) <=> ($a->attributes->current_ability ?? 0)
+                );
+                if (!empty($remaining)) {
+                    $assigned[] = $remaining[0]->id;
+                }
+            }
+        }
+
+        return $assigned;
     }
 
     /**
