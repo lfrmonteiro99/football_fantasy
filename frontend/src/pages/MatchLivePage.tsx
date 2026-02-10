@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useCallback, useState } from 'react';
+import React, { useEffect, useMemo, useCallback, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 
 import type {
@@ -208,6 +208,7 @@ const MatchLivePage: React.FC = () => {
   const [showFinalOverlay, setShowFinalOverlay] = useState(false);
   const [abortFn, setAbortFn] = useState<(() => void) | null>(null);
   const [tickCounter, setTickCounter] = useState(0);
+  const [showStats, setShowStats] = useState(false);
 
   // Prefer Redux state, fall back to local
   const ticks = simulation.ticks?.length > 0 ? simulation.ticks : localTicks;
