@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { useSelector, useDispatch } from 'react-redux';
+import { useSelector } from 'react-redux';
 import { fetchSquad, fetchTeamTactics } from '../store/teamSlice';
+import { useAppDispatch } from '../store';
 import {
   getFormations,
   getTacticAnalysis,
@@ -16,16 +17,11 @@ import type {
   CreateTacticPayload,
   SquadPlayer,
   FormationPosition,
+  PositionAbbreviation,
 } from '../types';
 import PitchEditor from '../components/tactics/PitchEditor';
 import TacticSettings from '../components/tactics/TacticSettings';
 import PlayerCard from '../components/tactics/PlayerCard';
-
-// ---------------------------------------------------------------------------
-// Typed dispatch
-// ---------------------------------------------------------------------------
-
-type AppDispatch = ReturnType<typeof useDispatch>;
 
 // ---------------------------------------------------------------------------
 // Default tactic payload
@@ -51,7 +47,7 @@ const DEFAULT_TACTIC: Partial<CreateTacticPayload> = {
 // ---------------------------------------------------------------------------
 
 interface EditorPosition {
-  position: string;
+  position: PositionAbbreviation;
   x: number;
   y: number;
   playerId?: number;
@@ -63,7 +59,7 @@ interface EditorPosition {
 // ---------------------------------------------------------------------------
 
 const TacticsPage: React.FC = () => {
-  const dispatch = useDispatch<AppDispatch>();
+  const dispatch = useAppDispatch();
   const { user } = useSelector((state: RootState) => state.auth);
   const { squad, teamTactics, loading: teamLoading } = useSelector(
     (state: RootState) => state.team,
@@ -263,8 +259,8 @@ const TacticsPage: React.FC = () => {
     setSaveError(null);
     setSaveSuccess(false);
 
-    const customPositions = editorPositions.map((p) => ({
-      position: p.position,
+    const customPositions: FormationPosition[] = editorPositions.map((p) => ({
+      position: p.position as PositionAbbreviation,
       x: p.x,
       y: p.y,
     }));
