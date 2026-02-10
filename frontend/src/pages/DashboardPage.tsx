@@ -71,8 +71,7 @@ const DashboardPage: React.FC = () => {
   };
 
   const isLoading =
-    gameTime.loading === 'loading' &&
-    league.loading === 'loading' &&
+    (gameTime.loading === 'loading' || league.loading === 'loading') &&
     !gameTime.currentDate;
 
   if (isLoading) {
