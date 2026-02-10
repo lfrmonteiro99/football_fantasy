@@ -244,14 +244,31 @@ class SimulationStreamController extends Controller
      */
     private function validateMatchReadiness(GameMatch $match): void
     {
-        $match->loadMissing(['homeTeam', 'awayTeam', 'homeFormation', 'awayFormation']);
+        $match->loadMissing(['homeTeam.primaryTactic.formation', 'awayTeam.primaryTactic.formation', 'homeFormation', 'awayFormation']);
 
         if (!$match->homeTeam || !$match->awayTeam) {
             abort(422, 'Match must have both a home team and an away team assigned.');
         }
 
+        // Auto-assign formations from team's primary tactic if not set on the match
+        if (!$match->homeFormation) {
+            $formation = $match->homeTeam->primaryTactic?->formation ?? \App\Models\Formation::first();
+            if ($formation) {
+                $match->update(['home_formation_id' => $formation->id]);
+                $match->load('homeFormation');
+            }
+        }
+
+        if (!$match->awayFormation) {
+            $formation = $match->awayTeam->primaryTactic?->formation ?? \App\Models\Formation::first();
+            if ($formation) {
+                $match->update(['away_formation_id' => $formation->id]);
+                $match->load('awayFormation');
+            }
+        }
+
         if (!$match->homeFormation || !$match->awayFormation) {
-            abort(422, 'Both teams must have a formation assigned to the match.');
+            abort(422, 'Both teams must have a formation assigned and no default could be resolved.');
         }
 
         $match->homeTeam->loadMissing('players');
