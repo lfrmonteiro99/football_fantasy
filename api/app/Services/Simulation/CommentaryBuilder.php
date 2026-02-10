@@ -223,13 +223,24 @@ class CommentaryBuilder
         // Determine template key
         $templateKey = $this->resolveTemplateKey($event, $state);
 
-        // Fill GK name for saves/shots on target
-        if (in_array($type, ['save', 'shot_on_target', 'penalty_miss'])) {
-            $opposingSide = $state->opponent($event['team'] ?? 'home');
-            $gk = $state->getGoalkeeper($opposingSide);
-            $replacements['{gk}'] = $gk
-                ? ($gk->first_name . ' ' . $gk->last_name)
-                : 'the goalkeeper';
+        // Fill GK name for saves, shots on target, penalties, and goal kicks
+        if (in_array($type, ['save', 'shot_on_target', 'penalty_miss', 'goal_kick'])) {
+            if ($type === 'save') {
+                // For saves, the primary player IS the goalkeeper who made the save
+                $replacements['{gk}'] = $event['primary_player_name'] ?? 'the goalkeeper';
+                // The shooter is the secondary player
+                $replacements['{player}'] = $event['secondary_player_name'] ?? 'the attacker';
+            } elseif ($type === 'goal_kick') {
+                // For goal kicks, the primary player is the GK taking the kick
+                $replacements['{gk}'] = $event['primary_player_name'] ?? 'the goalkeeper';
+            } else {
+                // For shots on target and penalty misses, get the opposing GK
+                $opposingSide = $state->opponent($event['team'] ?? 'home');
+                $gk = $state->getGoalkeeper($opposingSide);
+                $replacements['{gk}'] = $gk
+                    ? ($gk->first_name . ' ' . $gk->last_name)
+                    : 'the goalkeeper';
+            }
         }
 
         // Fill player count for red cards

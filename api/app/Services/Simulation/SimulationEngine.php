@@ -428,8 +428,8 @@ class SimulationEngine
      */
     private function simulateMinute(): array
     {
-        // Roll: does something notable happen? (35-45% chance)
-        $actionChance = random_int(35, 45);
+        // Roll: does something notable happen? (55-70% chance)
+        $actionChance = random_int(55, 70);
         if (random_int(1, 100) > $actionChance) {
             // Quiet minute
             return [];
@@ -438,11 +438,11 @@ class SimulationEngine
         $roll = random_int(1, 100);
 
         return match (true) {
-            $roll <= 35  => $this->simulateAttack(),      // 35% attack
-            $roll <= 65  => $this->simulateFoul(),         // 30% foul
-            $roll <= 80  => $this->simulateSetPiece(),     // 15% set piece
-            $roll <= 90  => $this->simulateDefensiveAction(), // 10% defensive
-            default      => $this->simulateOffside(),      // 10% offside
+            $roll <= 30  => $this->simulateAttack(),           // 30% attack
+            $roll <= 50  => $this->simulateFoul(),             // 20% foul
+            $roll <= 65  => $this->simulateSetPiece(),         // 15% set piece
+            $roll <= 85  => $this->simulateDefensiveAction(),  // 20% defensive (tackles, interceptions)
+            default      => $this->simulateOffside(),          // 15% offside
         };
     }
 
@@ -1008,6 +1008,10 @@ class SimulationEngine
             return [];
         }
 
+        // Throw-in happens on the sideline (y = 0 or 100)
+        $sidelineY = random_int(0, 1) === 0 ? 0.0 : 100.0;
+        $this->state->ball = ['x' => (float) random_int(15, 85), 'y' => $sidelineY];
+
         return [$this->buildEvent('throw_in', $side, $player, null, 'success', [])];
     }
 
@@ -1024,11 +1028,18 @@ class SimulationEngine
             return [];
         }
 
+        // Goal kick starts from the 6-yard box
+        $gkX = $defSide === 'home' ? 6.0 : 94.0;
+        $this->state->ball = ['x' => $gkX, 'y' => (float) random_int(35, 65)];
+
         // Goal kick: 60% possession goes to kicking team, 40% opponent wins it
         if (random_int(1, 100) <= 60) {
             $this->state->possession = $defSide;
         }
-        $this->state->ball = ['x' => 50.0, 'y' => 50.0];
+
+        // Ball lands in midfield after the kick
+        $landX = $defSide === 'home' ? (float) random_int(35, 55) : (float) random_int(45, 65);
+        $this->state->ball = ['x' => $landX, 'y' => (float) random_int(25, 75)];
 
         return [$this->buildEvent('goal_kick', $defSide, $gk, null, 'success', [])];
     }
@@ -1068,10 +1079,15 @@ class SimulationEngine
             $interceptor = $this->pickWeightedPlayer($defSide, self::DEFENSIVE_POSITIONS, 'anticipation');
             if ($interceptor) {
                 $ballPos = $this->state->ball;
+                // Interceptor moves to the ball and carries it slightly
+                $newX = max(0.0, min(100.0, $ballPos['x'] + random_int(-8, 8)));
+                $newY = max(5.0, min(95.0, $ballPos['y'] + random_int(-8, 8)));
+                $newPos = ['x' => $newX, 'y' => $newY];
                 $sequence = [
-                    $this->buildSequenceAction('run', $interceptor, $ballPos, $ballPos, random_int(200, 500)),
+                    $this->buildSequenceAction('run', $interceptor, $ballPos, $newPos, random_int(200, 500)),
                 ];
                 $events[] = $this->buildEvent('interception', $defSide, $interceptor, null, 'success', $sequence);
+                $this->state->ball = $newPos;
                 $this->state->possession = $defSide;
             }
         } else {
@@ -1079,7 +1095,11 @@ class SimulationEngine
             $clearer = $this->pickWeightedPlayer($defSide, ['CB', 'SW', 'DM'], 'heading');
             if ($clearer) {
                 $ballStart = $this->state->ball;
-                $ballEnd = ['x' => 50.0, 'y' => 50.0];
+                // Clearance sends ball toward midfield/flank, not dead center
+                $clearX = $defSide === 'home'
+                    ? (float) random_int(40, 65)
+                    : (float) random_int(35, 60);
+                $ballEnd = ['x' => $clearX, 'y' => (float) random_int(15, 85)];
                 $sequence = [
                     $this->buildSequenceAction('clearance', $clearer, $ballStart, $ballEnd, random_int(300, 600)),
                 ];
