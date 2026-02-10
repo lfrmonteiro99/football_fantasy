@@ -391,10 +391,6 @@ class SimulationEngine
             }
             $this->state->recalculatePossession();
 
-            // Generate passes for quiet minutes too
-            $passCount = random_int(3, 8);
-            $this->state->stats[$this->state->possession]['passes'] += $passCount;
-
             // Decide what happens
             $events = $this->simulateMinute();
 
@@ -422,28 +418,99 @@ class SimulationEngine
     // =========================================================================
 
     /**
-     * Simulate a single minute and return an array of events.
+     * Simulate a single minute as a passage of play with multiple micro-actions.
+     *
+     * Instead of a single dice roll, each minute generates 3-8 actions representing
+     * continuous play: passes, carries, tackles, shots, fouls, etc.
      *
      * @return array<int, array>
      */
     private function simulateMinute(): array
     {
-        // Roll: does something notable happen? (55-70% chance)
-        $actionChance = random_int(55, 70);
-        if (random_int(1, 100) > $actionChance) {
-            // Quiet minute
-            return [];
+        $events = [];
+        $sequence = []; // accumulate a continuous sequence across the whole minute
+
+        // Each minute = a passage of play with 3-8 actions
+        $actionCount = random_int(3, 8);
+
+        // Background passing: every minute has 4-8 passes regardless of what happens
+        // (represents the continuous ball circulation not shown as events)
+        $backgroundPasses = random_int(4, 8);
+        $this->state->stats[$this->state->possession]['passes'] += $backgroundPasses;
+
+        $lastActionWasPass = false;
+
+        for ($i = 0; $i < $actionCount; $i++) {
+            // What happens depends on context:
+            // - If we have possession, likely: pass, dribble, or shoot (if in attacking third)
+            // - Random chance of losing possession via tackle/interception
+            // - Occasional foul
+
+            $side = $this->state->possession;
+            $roll = random_int(1, 100);
+            $inAttackingThird = $this->isInAttackingThird($side);
+
+            if ($inAttackingThird && $roll <= 15) {
+                // In attacking third: 15% chance of shot attempt (was 20%)
+                $shotEvents = $this->resolveShot($side, null, $sequence);
+                $events = array_merge($events, $shotEvents);
+                $sequence = []; // reset after shot
+                break; // shot ends the passage
+            } elseif ($roll <= 10) {
+                // 10% foul interrupts play
+                $foulEvents = $this->simulateFoul();
+                $events = array_merge($events, $foulEvents);
+                $sequence = [];
+                break;
+            } elseif ($roll <= 25) {
+                // 15% turnover (tackle or interception) — was 10%
+                $defEvents = $this->simulateDefensiveAction();
+                $events = array_merge($events, $defEvents);
+                $sequence = [];
+                break;
+            } elseif ($roll <= 27 && $inAttackingThird && $lastActionWasPass) {
+                // 2% offside, only after a pass and in attacking third (was 5%)
+                $offEvents = $this->simulateOffside();
+                $events = array_merge($events, $offEvents);
+                $sequence = [];
+                break;
+            }
+
+            // Default: pass or carry (the bread-and-butter of football)
+            $passOrCarry = random_int(1, 100);
+            if ($passOrCarry <= 75) {
+                // Pass to teammate
+                $passerReceiver = $this->simulatePass($side, $sequence);
+                if ($passerReceiver) {
+                    $sequence = $passerReceiver['sequence'];
+                    $lastActionWasPass = true;
+                }
+            } else {
+                // Dribble/carry forward
+                $dribble = $this->simulateCarry($side, $sequence);
+                if ($dribble) {
+                    $sequence = $dribble['sequence'];
+                    $lastActionWasPass = false;
+                }
+            }
         }
 
-        $roll = random_int(1, 100);
+        // If we accumulated passes without an ending event, emit a possession event
+        if (!empty($sequence) && empty($events)) {
+            $fallbackPlayer = $this->pickRandomAvailablePlayer($this->state->possession);
+            if ($fallbackPlayer) {
+                $events[] = $this->buildEvent(
+                    'possession',
+                    $this->state->possession,
+                    $fallbackPlayer,
+                    null,
+                    'success',
+                    $sequence
+                );
+            }
+        }
 
-        return match (true) {
-            $roll <= 30  => $this->simulateAttack(),           // 30% attack
-            $roll <= 50  => $this->simulateFoul(),             // 20% foul
-            $roll <= 65  => $this->simulateSetPiece(),         // 15% set piece
-            $roll <= 85  => $this->simulateDefensiveAction(),  // 20% defensive (tackles, interceptions)
-            default      => $this->simulateOffside(),          // 15% offside
-        };
+        return $events;
     }
 
     // =========================================================================
@@ -474,7 +541,7 @@ class SimulationEngine
                 $lastPasser = $passer;
                 $ballStart = $this->state->ball;
                 $this->advanceBall($side, 5.0, 15.0);
-                $sequence[] = $this->buildSequenceAction('pass', $passer, $ballStart, $this->state->ball, random_int(800, 1500));
+                $sequence[] = $this->buildSequenceAction('pass', $passer, $ballStart, $this->state->ball, random_int(300, 600));
                 $this->state->stats[$side]['passes']++;
             }
         }
@@ -490,7 +557,7 @@ class SimulationEngine
                 $creator = $crosser;
                 $ballStart = $this->state->ball;
                 $this->moveBallToAttackingThird($side);
-                $sequence[] = $this->buildSequenceAction('cross', $crosser, $ballStart, $this->state->ball, random_int(1000, 2000));
+                $sequence[] = $this->buildSequenceAction('cross', $crosser, $ballStart, $this->state->ball, random_int(400, 800));
                 $events[] = $this->buildEvent('cross', $side, $crosser, null, 'success', $sequence);
                 $sequence = [];
             }
@@ -499,7 +566,7 @@ class SimulationEngine
             if ($lastPasser) {
                 $ballStart = $this->state->ball;
                 $this->moveBallToAttackingThird($side);
-                $sequence[] = $this->buildSequenceAction('pass', $lastPasser, $ballStart, $this->state->ball, random_int(600, 1200));
+                $sequence[] = $this->buildSequenceAction('pass', $lastPasser, $ballStart, $this->state->ball, random_int(300, 600));
             }
         } else {
             // Dribble
@@ -509,7 +576,7 @@ class SimulationEngine
                 $defender = $this->pickWeightedPlayer($defSide, self::DEFENSIVE_POSITIONS, 'tackling');
                 $ballStart = $this->state->ball;
                 $this->moveBallToAttackingThird($side);
-                $sequence[] = $this->buildSequenceAction('dribble', $dribbler, $ballStart, $this->state->ball, random_int(1500, 2500));
+                $sequence[] = $this->buildSequenceAction('dribble', $dribbler, $ballStart, $this->state->ball, random_int(400, 800));
                 $events[] = $this->buildEvent('dribble', $side, $dribbler, $defender, 'success', $sequence);
                 $sequence = [];
             }
@@ -558,8 +625,8 @@ class SimulationEngine
             // Blocked by defender
             $ballStart = $this->state->ball;
             $sequence = array_merge($priorSequence, [
-                $this->buildSequenceAction('shoot', $shooter, $ballStart, $this->goalPosition($side), random_int(400, 800)),
-                $this->buildSequenceAction('clearance', $defender ?? $shooter, $this->goalPosition($side), $ballStart, random_int(200, 500)),
+                $this->buildSequenceAction('shoot', $shooter, $ballStart, $this->goalPosition($side), random_int(200, 500)),
+                $this->buildSequenceAction('clearance', $defender ?? $shooter, $this->goalPosition($side), $ballStart, random_int(200, 400)),
             ]);
 
             $events[] = $this->buildEvent('shot_on_target', $side, $shooter, $defender, 'blocked', $sequence);
@@ -580,7 +647,7 @@ class SimulationEngine
             // Off target
             $ballStart = $this->state->ball;
             $sequence = array_merge($priorSequence, [
-                $this->buildSequenceAction('shoot', $shooter, $ballStart, $this->missedShotPosition($side), random_int(400, 800)),
+                $this->buildSequenceAction('shoot', $shooter, $ballStart, $this->missedShotPosition($side), random_int(200, 500)),
             ]);
 
             $events[] = $this->buildEvent('shot_off_target', $side, $shooter, null, 'wide', $sequence);
@@ -600,7 +667,7 @@ class SimulationEngine
         if (random_int(1, 100) <= (int) $goalChance) {
             // GOAL!
             $sequence = array_merge($priorSequence, [
-                $this->buildSequenceAction('shoot', $shooter, $ballStart, $goalPos, random_int(400, 700)),
+                $this->buildSequenceAction('shoot', $shooter, $ballStart, $goalPos, random_int(200, 500)),
             ]);
 
             $goalEvent = $this->buildEvent('goal', $side, $shooter, $assistProvider, 'goal', $sequence);
@@ -629,8 +696,8 @@ class SimulationEngine
             $this->state->stats[$defSide]['saves']++;
 
             $sequence = array_merge($priorSequence, [
-                $this->buildSequenceAction('shoot', $shooter, $ballStart, $goalPos, random_int(400, 700)),
-                $this->buildSequenceAction('save', $gk ?? $shooter, $goalPos, $goalPos, random_int(300, 600)),
+                $this->buildSequenceAction('shoot', $shooter, $ballStart, $goalPos, random_int(200, 500)),
+                $this->buildSequenceAction('save', $gk ?? $shooter, $goalPos, $goalPos, random_int(150, 350)),
             ]);
 
             $events[] = $this->buildEvent('save', $defSide, $gk ?? $shooter, $shooter, 'saved', $sequence);
@@ -645,8 +712,8 @@ class SimulationEngine
 
         // Blocked by defender (remaining)
         $sequence = array_merge($priorSequence, [
-            $this->buildSequenceAction('shoot', $shooter, $ballStart, $goalPos, random_int(400, 700)),
-            $this->buildSequenceAction('clearance', $defender ?? $shooter, $goalPos, $ballStart, random_int(200, 500)),
+            $this->buildSequenceAction('shoot', $shooter, $ballStart, $goalPos, random_int(200, 500)),
+            $this->buildSequenceAction('clearance', $defender ?? $shooter, $goalPos, $ballStart, random_int(200, 400)),
         ]);
 
         $events[] = $this->buildEvent('shot_on_target', $side, $shooter, $defender, 'blocked', $sequence);
@@ -699,8 +766,8 @@ class SimulationEngine
         $this->state->ball = $ballPos;
 
         $sequence = [
-            $this->buildSequenceAction('run', $fouled, ['x' => $ballPos['x'] - 5, 'y' => $ballPos['y']], $ballPos, random_int(800, 1500)),
-            $this->buildSequenceAction('foul', $fouler, $ballPos, $ballPos, random_int(200, 500)),
+            $this->buildSequenceAction('run', $fouled, ['x' => $ballPos['x'] - 5, 'y' => $ballPos['y']], $ballPos, random_int(200, 500)),
+            $this->buildSequenceAction('foul', $fouler, $ballPos, $ballPos, random_int(150, 300)),
         ];
 
         $foulEvent = $this->buildEvent('foul', $defSide, $fouler, $fouled, 'success', $sequence);
@@ -817,7 +884,7 @@ class SimulationEngine
         $goalChance = max(55, min(90, $goalChance));
 
         $sequence = [
-            $this->buildSequenceAction('shoot', $taker, $penSpot, $goalPos, random_int(600, 1000)),
+            $this->buildSequenceAction('shoot', $taker, $penSpot, $goalPos, random_int(200, 500)),
         ];
 
         if (random_int(1, 100) <= (int) $goalChance) {
@@ -829,7 +896,7 @@ class SimulationEngine
             $this->state->ball = ['x' => 50.0, 'y' => 50.0];
         } else {
             // Penalty saved
-            $sequence[] = $this->buildSequenceAction('save', $gk ?? $taker, $goalPos, $goalPos, random_int(300, 600));
+            $sequence[] = $this->buildSequenceAction('save', $gk ?? $taker, $goalPos, $goalPos, random_int(150, 350));
             $events[] = $this->buildEvent('penalty', $attSide, $taker, $gk, 'saved', $sequence);
             $this->state->stats[$defSide]['saves']++;
         }
@@ -913,7 +980,7 @@ class SimulationEngine
         $targetPos['y'] += random_int(-15, 15); // slight variation
 
         $sequence = [
-            $this->buildSequenceAction('cross', $taker, $cornerPos, $targetPos, random_int(1200, 2000)),
+            $this->buildSequenceAction('cross', $taker, $cornerPos, $targetPos, random_int(400, 800)),
         ];
 
         $events[] = $this->buildEvent('corner', $side, $taker, null, 'success', $sequence);
@@ -941,7 +1008,7 @@ class SimulationEngine
                     $goalChance = max(8, min(35, $goalChance));
 
                     $hdrSequence = [
-                        $this->buildSequenceAction('header', $header, $targetPos, $this->goalPosition($side), random_int(300, 600)),
+                        $this->buildSequenceAction('header', $header, $targetPos, $this->goalPosition($side), random_int(200, 400)),
                     ];
 
                     if (random_int(1, 100) <= (int) $goalChance) {
@@ -954,7 +1021,7 @@ class SimulationEngine
                         $this->state->ball = ['x' => 50.0, 'y' => 50.0];
                     } else {
                         // Header saved
-                        $hdrSequence[] = $this->buildSequenceAction('save', $gk ?? $header, $this->goalPosition($side), $this->goalPosition($side), random_int(200, 500));
+                        $hdrSequence[] = $this->buildSequenceAction('save', $gk ?? $header, $this->goalPosition($side), $this->goalPosition($side), random_int(150, 350));
                         $events[] = $this->buildEvent('header', $side, $header, null, 'saved', $hdrSequence);
                         $defSide = $this->state->opponent($side);
                         $this->state->stats[$defSide]['saves']++;
@@ -962,7 +1029,7 @@ class SimulationEngine
                 } else {
                     // Header off target
                     $hdrSequence = [
-                        $this->buildSequenceAction('header', $header, $targetPos, $this->missedShotPosition($side), random_int(300, 600)),
+                        $this->buildSequenceAction('header', $header, $targetPos, $this->missedShotPosition($side), random_int(200, 400)),
                     ];
                     $events[] = $this->buildEvent('header', $side, $header, null, 'wide', $hdrSequence);
                 }
@@ -1068,7 +1135,7 @@ class SimulationEngine
             if ($tackler) {
                 $ballPos = $this->state->ball;
                 $sequence = [
-                    $this->buildSequenceAction('tackle', $tackler, $ballPos, $ballPos, random_int(300, 700)),
+                    $this->buildSequenceAction('tackle', $tackler, $ballPos, $ballPos, random_int(200, 400)),
                 ];
                 $events[] = $this->buildEvent('tackle', $defSide, $tackler, $attacker, 'success', $sequence);
                 $this->state->stats[$defSide]['tackles']++;
@@ -1087,6 +1154,7 @@ class SimulationEngine
                     $this->buildSequenceAction('run', $interceptor, $ballPos, $newPos, random_int(200, 500)),
                 ];
                 $events[] = $this->buildEvent('interception', $defSide, $interceptor, null, 'success', $sequence);
+                $this->state->stats[$defSide]['tackles']++;
                 $this->state->ball = $newPos;
                 $this->state->possession = $defSide;
             }
@@ -1101,9 +1169,10 @@ class SimulationEngine
                     : (float) random_int(35, 60);
                 $ballEnd = ['x' => $clearX, 'y' => (float) random_int(15, 85)];
                 $sequence = [
-                    $this->buildSequenceAction('clearance', $clearer, $ballStart, $ballEnd, random_int(300, 600)),
+                    $this->buildSequenceAction('clearance', $clearer, $ballStart, $ballEnd, random_int(200, 400)),
                 ];
                 $events[] = $this->buildEvent('clearance', $defSide, $clearer, null, 'success', $sequence);
+                $this->state->stats[$defSide]['tackles']++;
                 $this->state->ball = $ballEnd;
                 $this->state->possession = $defSide;
             }
@@ -1134,7 +1203,7 @@ class SimulationEngine
 
         $ballPos = $this->state->ball;
         $sequence = [
-            $this->buildSequenceAction('run', $player, $ballPos, ['x' => $ballPos['x'] + 10, 'y' => $ballPos['y']], random_int(500, 1000)),
+            $this->buildSequenceAction('run', $player, $ballPos, ['x' => $ballPos['x'] + 10, 'y' => $ballPos['y']], random_int(200, 500)),
         ];
 
         return [$this->buildEvent('offside', $side, $player, null, 'fail', $sequence)];
@@ -1303,8 +1372,8 @@ class SimulationEngine
      */
     private function resolvePossession(): void
     {
-        // Base: keep current possession 60% of the time
-        if (random_int(1, 100) <= 60) {
+        // Base: keep current possession 80% of the time
+        if (random_int(1, 100) <= 80) {
             return;
         }
 
@@ -1449,6 +1518,91 @@ class SimulationEngine
     }
 
     /**
+     * Simulate a pass: pick a passer and a DIFFERENT receiver, advance ball, track stats.
+     *
+     * @param string $side 'home'|'away'
+     * @param array $currentSequence The running sequence of sub-actions
+     * @return array|null Returns ['sequence' => ..., 'receiver' => ...] or null if no players
+     */
+    private function simulatePass(string $side, array $currentSequence): ?array
+    {
+        $passer = $this->pickWeightedPlayer($side, self::CREATIVE_POSITIONS, 'passing');
+        if (!$passer) {
+            return null;
+        }
+
+        // Pick a DIFFERENT player as receiver
+        $receiver = $this->pickReceiverExcluding($side, $passer->id);
+        if (!$receiver) {
+            return null;
+        }
+
+        $ballStart = $this->state->ball;
+        $this->advanceBall($side, 3.0, 12.0);
+
+        $step = $this->buildSequenceAction('pass', $passer, $ballStart, $this->state->ball, random_int(300, 600));
+        $step['target_id'] = $receiver->id;
+        $step['target_name'] = $receiver->first_name . ' ' . $receiver->last_name;
+
+        $currentSequence[] = $step;
+        $this->state->stats[$side]['passes']++;
+
+        return ['sequence' => $currentSequence, 'receiver' => $receiver];
+    }
+
+    /**
+     * Simulate a player carrying/dribbling the ball forward.
+     *
+     * @param string $side 'home'|'away'
+     * @param array $currentSequence The running sequence of sub-actions
+     * @return array|null Returns ['sequence' => ...] or null if no player available
+     */
+    private function simulateCarry(string $side, array $currentSequence): ?array
+    {
+        $carrier = $this->pickWeightedPlayer($side, self::SHOOTING_POSITIONS, 'dribbling');
+        if (!$carrier) {
+            return null;
+        }
+
+        $ballStart = $this->state->ball;
+        $this->advanceBall($side, 5.0, 15.0);
+
+        $step = $this->buildSequenceAction('dribble', $carrier, $ballStart, $this->state->ball, random_int(400, 800));
+        $currentSequence[] = $step;
+
+        return ['sequence' => $currentSequence];
+    }
+
+    /**
+     * Pick a receiver from a side's available outfield players, excluding a specific player.
+     *
+     * @param string $side 'home'|'away'
+     * @param int $excludeId Player ID to exclude (the passer)
+     */
+    private function pickReceiverExcluding(string $side, int $excludeId): ?Player
+    {
+        $available = $this->state->getAvailableOutfieldPlayers($side);
+        unset($available[$excludeId]);
+        if (empty($available)) {
+            return null;
+        }
+        $keys = array_keys($available);
+        return $available[$keys[array_rand($keys)]];
+    }
+
+    /**
+     * Check if the ball is in the attacking third for the given side.
+     *
+     * Home attacks toward x=100 (attacking third: x > 65).
+     * Away attacks toward x=0 (attacking third: x < 35).
+     */
+    private function isInAttackingThird(string $side): bool
+    {
+        $x = $this->state->ball['x'];
+        return $side === 'home' ? $x > 65 : $x < 35;
+    }
+
+    /**
      * Find a specific player in a side's lineup.
      */
     private function findPlayer(string $side, ?int $playerId): ?Player
@@ -1551,16 +1705,18 @@ class SimulationEngine
     }
 
     /**
-     * Move ball into the attacking third.
+     * Move ball progressively toward the attacking third (not teleporting).
+     *
+     * Advances 60-80% of the remaining distance toward the goal area.
      */
     private function moveBallToAttackingThird(string $side): void
     {
-        if ($side === 'home') {
-            $this->state->ball['x'] = (float) random_int(75, 95);
-        } else {
-            $this->state->ball['x'] = (float) random_int(5, 25);
-        }
-        $this->state->ball['y'] = (float) random_int(20, 80);
+        $target = $side === 'home' ? 85.0 : 15.0;
+        $current = $this->state->ball['x'];
+        // Move 60-80% of the way toward the attacking third
+        $progress = 0.6 + (mt_rand() / mt_getrandmax()) * 0.2;
+        $this->state->ball['x'] = $current + ($target - $current) * $progress;
+        $this->state->ball['y'] = max(10.0, min(90.0, $this->state->ball['y'] + random_int(-15, 15)));
     }
 
     /**

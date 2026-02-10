@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useCallback, useState, useRef } from 'react';
+import React, { useEffect, useMemo, useCallback, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 
 import type {
@@ -129,36 +129,33 @@ function applyPossessionShift(
 ): Pitch2DPlayer[] {
   if (!possession || !zone) return basePlayers;
 
-  let homeShift = 0;
-  let awayShift = 0;
+  // Determine push direction: positive = toward x=100, negative = toward x=0
+  let attackPush = 0; // for the attacking team
+  let defendPull = 0; // for the defending team (negative = retreat)
 
-  if (possession === 'home') {
-    if (zone.includes('att')) {
-      homeShift = 8;
-      awayShift = -3;
-    } else if (zone.includes('mid')) {
-      homeShift = 3;
-      awayShift = -1;
-    } else {
-      homeShift = -3;
-      awayShift = 5;
-    }
+  if (zone.includes('att')) {
+    attackPush = 6;
+    defendPull = -3;
+  } else if (zone.includes('mid')) {
+    attackPush = 3;
+    defendPull = -1;
   } else {
-    if (zone.includes('att')) {
-      homeShift = 5;
-      awayShift = -8;
-    } else if (zone.includes('mid')) {
-      homeShift = 1;
-      awayShift = -3;
-    } else {
-      homeShift = -5;
-      awayShift = 3;
-    }
+    attackPush = -2;
+    defendPull = 4;
   }
 
   return basePlayers.map((p) => {
-    const shift = p.team === 'home' ? homeShift : -awayShift;
     if (p.position === 'GK') return p;
+
+    let shift: number;
+    if (p.team === possession) {
+      // Attacking team: home pushes right (+x), away pushes left (-x)
+      shift = possession === 'home' ? attackPush : -attackPush;
+    } else {
+      // Defending team: home retreats left (-x), away retreats right (+x)
+      shift = possession === 'home' ? -defendPull : defendPull;
+    }
+
     return {
       ...p,
       x: Math.max(3, Math.min(97, p.x + shift)),
@@ -210,7 +207,7 @@ const MatchLivePage: React.FC = () => {
   const [localError, setLocalError] = useState<string | null>(null);
   const [showFinalOverlay, setShowFinalOverlay] = useState(false);
   const [abortFn, setAbortFn] = useState<(() => void) | null>(null);
-  const [showStats, setShowStats] = useState(false);
+  const [tickCounter, setTickCounter] = useState(0);
 
   // Prefer Redux state, fall back to local
   const ticks = simulation.ticks?.length > 0 ? simulation.ticks : localTicks;
@@ -264,6 +261,7 @@ const MatchLivePage: React.FC = () => {
             case 'minute': {
               const tick = data as SimulationTick;
               setLocalTicks((prev) => [...prev, tick]);
+              setTickCounter(c => c + 1);
               try { dispatch(addTick(tick)); } catch { /* noop */ }
               break;
             }
@@ -364,37 +362,36 @@ const MatchLivePage: React.FC = () => {
     [basePlayers, currentTick?.possession, currentTick?.zone],
   );
 
-  // Fallback ball position based on zone
-  const zoneBallRef = useRef<{ x: number; y: number }>({ x: 50, y: 50 });
-  const zoneBallPosition = useMemo(() => {
+  // Ball position from tick data (preferred) or zone-based fallback
+  const tickBallPosition = useMemo(() => {
     if (!currentTick) return null;
-    const zone = currentTick.zone;
-    const possession = currentTick.possession;
 
-    let bx = 50;
-    let by = 50;
-
-    if (zone?.includes('att') && possession === 'home') {
-      bx = 75;
-      by = 40 + Math.random() * 20;
-    } else if (zone?.includes('att') && possession === 'away') {
-      bx = 25;
-      by = 40 + Math.random() * 20;
-    } else if (zone?.includes('def') && possession === 'home') {
-      bx = 25;
-      by = 35 + Math.random() * 30;
-    } else if (zone?.includes('def') && possession === 'away') {
-      bx = 75;
-      by = 35 + Math.random() * 30;
-    } else {
-      bx = 45 + Math.random() * 10;
-      by = 35 + Math.random() * 30;
+    // Prefer direct ball position from tick (if backend sends it)
+    if ((currentTick as any).ball) {
+      return (currentTick as any).ball as { x: number; y: number };
     }
 
-    const pos = { x: bx, y: by };
-    zoneBallRef.current = pos;
-    return pos;
-  }, [currentTick?.zone, currentTick?.possession, currentTick?.minute]);
+    // Fallback: deterministic position based on zone + minute (no Math.random)
+    const zone = currentTick.zone;
+    const possession = currentTick.possession;
+    const min = currentTick.minute;
+
+    // Use minute as a pseudo-random seed for deterministic y
+    const pseudoY = 35 + ((min * 7 + 13) % 30);
+
+    let bx = 50;
+    if (zone?.includes('att') && possession === 'home') {
+      bx = 72;
+    } else if (zone?.includes('att') && possession === 'away') {
+      bx = 28;
+    } else if (zone?.includes('def') && possession === 'home') {
+      bx = 28;
+    } else if (zone?.includes('def') && possession === 'away') {
+      bx = 72;
+    }
+
+    return { x: bx, y: pseudoY };
+  }, [currentTick?.zone, currentTick?.possession, currentTick?.minute, (currentTick as any)?.ball]);
 
   // Sequence animation player
   const currentEvents = currentTick?.events ?? [];
@@ -407,12 +404,12 @@ const MatchLivePage: React.FC = () => {
   } = useSequencePlayer(
     possessionShiftedPlayers,
     currentEvents,
-    currentTick?.minute ?? -1,
-    speed !== 'instant',
+    tickCounter,       // CHANGED from currentTick?.minute ?? -1
+    speed !== 'instant', // disable animation in instant mode
   );
 
   const pitchPlayers = seqAnimating ? seqPlayers : possessionShiftedPlayers;
-  const ballPosition = seqAnimating && seqBall ? seqBall : zoneBallPosition;
+  const ballPosition = seqAnimating && seqBall ? seqBall : tickBallPosition;
   const pitchTransitionMs = seqAnimating ? seqTransition : 400;
 
   // Timeline events
