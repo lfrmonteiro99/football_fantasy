@@ -31,7 +31,6 @@
 # Composer
 composer.phar
 /vendor/
-composer.lock
 
 # Laravel Mix
 /public/mix-manifest.json

@@ -1,20 +1,24 @@
 #!/bin/bash
 
 # Football Fantasy Manager - Initial Setup Script
-# This script sets up the entire application for first-time use
+# Sets up the application for local development (non-Docker)
+# For Docker, just run: ./docker.sh
 
 set -e
 
-echo "Football Fantasy Manager - Initial Setup"
-echo "=========================================="
+echo "Football Fantasy Manager - Local Setup"
+echo "========================================"
+echo ""
+echo "NOTE: For Docker (no local dependencies needed), just run: ./docker.sh"
+echo ""
 
 # Check prerequisites
-echo ""
 echo "Checking prerequisites..."
 
 # Check PHP
 if ! command -v php &> /dev/null; then
     echo "ERROR: PHP is not installed. Please install PHP 8.1+ and try again."
+    echo "       Or use Docker instead: ./docker.sh"
     exit 1
 fi
 
@@ -24,6 +28,7 @@ echo "OK: PHP $PHP_VERSION found"
 # Check Node.js
 if ! command -v node &> /dev/null; then
     echo "ERROR: Node.js is not installed. Please install Node.js 16+ and try again."
+    echo "       Or use Docker instead: ./docker.sh"
     exit 1
 fi
 
@@ -39,15 +44,20 @@ fi
 NPM_VERSION=$(npm -v)
 echo "OK: npm $NPM_VERSION found"
 
-# Check Composer
-if ! command -v composer &> /dev/null; then
-    echo "ERROR: Composer is not installed. Please install Composer and try again."
-    echo "   Visit: https://getcomposer.org/download/"
+# Check Composer — fall back to Docker if not installed
+USE_DOCKER_COMPOSER=false
+if command -v composer &> /dev/null; then
+    COMPOSER_VERSION=$(composer --version | cut -d' ' -f3)
+    echo "OK: Composer $COMPOSER_VERSION found"
+elif command -v docker &> /dev/null; then
+    echo "WARNING: Composer not installed locally, using Docker container instead"
+    USE_DOCKER_COMPOSER=true
+else
+    echo "ERROR: Neither Composer nor Docker is installed."
+    echo "   Install Composer: https://getcomposer.org/download/"
+    echo "   Or install Docker and run: ./docker.sh"
     exit 1
 fi
-
-COMPOSER_VERSION=$(composer --version | cut -d' ' -f3)
-echo "OK: Composer $COMPOSER_VERSION found"
 
 echo ""
 echo "1/2  Setting up Laravel API..."
@@ -55,11 +65,14 @@ echo "-----------------------------"
 cd api
 
 echo "Installing PHP dependencies..."
-composer install
+if [ "$USE_DOCKER_COMPOSER" = true ]; then
+    docker run --rm -v "$(pwd):/app" -w /app composer:latest install
+else
+    composer install
+fi
 
 echo "Setting up environment..."
 if [ ! -f ".env" ]; then
-    cp .env.example .env 2>/dev/null || echo "No .env.example found, creating basic .env"
     cat > .env << EOF
 APP_NAME="Football Fantasy Manager"
 APP_ENV=local
@@ -116,7 +129,7 @@ echo "Ready to start! Choose an option:"
 echo ""
 echo "   Local Mode:         ./start.sh"
 echo "   Development Mode:   ./dev.sh"
-echo "   Docker Mode:        docker-compose up --build"
+echo "   Docker Mode:        ./docker.sh"
 echo ""
 echo "Check status:          ./status.sh"
 echo "Stop services:         ./stop.sh"
