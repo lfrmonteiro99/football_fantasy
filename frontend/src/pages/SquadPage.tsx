@@ -6,24 +6,8 @@ import type { RootState } from '../types';
 import { formatCurrency } from '../utils/helpers';
 import PlayerList from '../components/squad/PlayerList';
 import PlayerDetail from '../components/squad/PlayerDetail';
-
-// ---------------------------------------------------------------------------
-// Stat card
-// ---------------------------------------------------------------------------
-
-interface StatCardProps {
-  value: string | number;
-  label: string;
-  icon?: React.ReactNode;
-}
-
-const StatCard: React.FC<StatCardProps> = ({ value, label, icon }) => (
-  <div className="bg-white rounded-xl border border-gray-200 px-4 py-3 flex flex-col items-center shadow-sm">
-    {icon && <div className="text-gray-400 mb-1">{icon}</div>}
-    <span className="text-2xl font-bold text-gray-900">{value}</span>
-    <span className="text-xs text-gray-500 mt-0.5">{label}</span>
-  </div>
-);
+import StatCard from '../components/common/StatCard';
+import Skeleton from '../components/common/Skeleton';
 
 // ---------------------------------------------------------------------------
 // Icons (inline SVG)
@@ -90,11 +74,17 @@ const SquadPage: React.FC = () => {
   // Loading state
   if (loading === 'loading' && squad.length === 0) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto" />
-          <p className="mt-4 text-gray-500">Loading squad...</p>
+      <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+        <div>
+          <Skeleton className="h-8 w-48 mb-2" />
+          <Skeleton className="h-4 w-64" />
         </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <Skeleton.StatCard key={i} />
+          ))}
+        </div>
+        <Skeleton.Table rows={8} />
       </div>
     );
   }
@@ -102,16 +92,18 @@ const SquadPage: React.FC = () => {
   // Error state
   if (error) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-center text-red-600">
-          <p className="font-semibold text-lg">Failed to load squad</p>
-          <p className="text-sm mt-1">{error}</p>
-          <button
-            onClick={() => user?.managed_team_id && dispatch(fetchSquad(user.managed_team_id))}
-            className="mt-4 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-          >
-            Retry
-          </button>
+      <div className="max-w-7xl mx-auto px-4 py-6">
+        <div className="rounded-xl border border-surface-border bg-white shadow-card overflow-hidden">
+          <div className="text-center py-8 px-5">
+            <p className="text-heading-3 text-red-600">Failed to load squad</p>
+            <p className="text-body-sm text-navy-500 mt-1">{error}</p>
+            <button
+              onClick={() => user?.managed_team_id && dispatch(fetchSquad(user.managed_team_id))}
+              className="mt-4 px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors"
+            >
+              Retry
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -121,11 +113,11 @@ const SquadPage: React.FC = () => {
     <div className="max-w-7xl mx-auto px-4 py-6">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">
+        <h1 className="font-display text-display uppercase tracking-tight text-navy-900">
           Squad Overview
         </h1>
         {currentTeam && (
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="text-body text-navy-500 mt-1">
             {currentTeam.name} &mdash; {currentTeam.stadium_name ?? 'No stadium'}
           </p>
         )}
@@ -138,32 +130,37 @@ const SquadPage: React.FC = () => {
             value={squadStats.total_players}
             label="Players"
             icon={<UsersIcon />}
+            accent="brand"
           />
           <StatCard
             value={squadStats.average_age.toFixed(1)}
             label="Avg Age"
             icon={<ChartIcon />}
+            accent="accent"
           />
           <StatCard
             value={squadStats.average_rating.toFixed(0)}
             label="Avg Rating"
             icon={<HeartIcon />}
+            accent="navy"
           />
           <StatCard
             value={squadStats.injured_players}
             label="Injured"
             icon={<InjuryIcon />}
+            accent="brand"
           />
           <StatCard
             value={formatCurrency(squadStats.total_value)}
             label="Total Value"
             icon={<CurrencyIcon />}
+            accent="accent"
           />
         </div>
       )}
 
       {/* Player list */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+      <div className="rounded-xl border border-surface-border bg-white shadow-card overflow-hidden">
         <PlayerList
           players={squad}
           onPlayerClick={handlePlayerClick}

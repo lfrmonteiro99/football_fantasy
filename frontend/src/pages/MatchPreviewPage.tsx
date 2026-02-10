@@ -22,11 +22,6 @@ import { getMatchDetails, getMatchLineup, saveMatchLineup as saveLineupApi } fro
 // Helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Build Pitch2DPlayer[] from MatchLineupResponse starting XIs.
- * Uses formation positions or x/y from lineup entries, or falls back
- * to default position coordinates.
- */
 const POSITION_DEFAULTS: Record<string, { x: number; y: number }> = {
   GK: { x: 8, y: 50 },
   CB: { x: 25, y: 50 },
@@ -59,10 +54,8 @@ function buildPitchPlayers(
 ): Pitch2DPlayer[] {
   const players: Pitch2DPlayer[] = [];
 
-  // Try to match players to formation positions by order
   const formationPositions = lineupSide.formation?.positions ?? [];
 
-  // Group starting by position for y-axis spreading
   const byPosition: Record<string, MatchLineup[]> = {};
   for (const ml of lineupSide.starting) {
     const pos = ml.position || 'CM';
@@ -78,11 +71,9 @@ function buildPitchPlayers(
     const yStep = count > 1 ? ySpread / (count - 1) : 0;
 
     group.forEach((ml, idx) => {
-      // Use lineup x/y if available, otherwise defaults
       let x = ml.x != null ? ml.x : base.x;
       let y = ml.y != null ? ml.y : (count > 1 ? yStart + yStep * idx : base.y);
 
-      // Mirror for away team
       if (team === 'away') {
         x = 100 - x;
         y = 100 - y;
@@ -101,7 +92,6 @@ function buildPitchPlayers(
     });
   }
 
-  // If formation positions are available and we got no lineup x/y, overlay
   if (formationPositions.length > 0 && lineupSide.starting.length > 0) {
     const sorted = [...lineupSide.starting].sort((a, b) => a.sort_order - b.sort_order);
     sorted.forEach((ml, idx) => {
@@ -129,25 +119,21 @@ const MatchPreviewPage: React.FC = () => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
 
-  // Local state for direct API calls (fallback if Redux thunks aren't wired)
   const [match, setMatch] = useState<Match | null>(null);
   const [lineup, setLineup] = useState<MatchLineupResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Selection state for swap
   const [selectedStarterId, setSelectedStarterId] = useState<number | null>(null);
   const [swapTeam, setSwapTeam] = useState<'home' | 'away'>('home');
 
-  // Redux state (may be populated by thunks)
   const reduxMatch = useAppSelector((s: any) => s.match?.currentMatch);
   const reduxLineup = useAppSelector((s: any) => s.match?.currentLineup);
 
   const activeMatch = reduxMatch ?? match;
   const activeLineup = reduxLineup ?? lineup;
 
-  // Fetch data on mount
   useEffect(() => {
     let cancelled = false;
 
@@ -155,11 +141,9 @@ const MatchPreviewPage: React.FC = () => {
       setLoading(true);
       setError(null);
       try {
-        // Dispatch Redux thunks
         dispatch(fetchMatchDetails(matchId));
         dispatch(fetchMatchLineup(matchId));
 
-        // Also fetch directly as fallback
         const [matchData, lineupData] = await Promise.all([
           getMatchDetails(matchId),
           getMatchLineup(matchId),
@@ -182,7 +166,6 @@ const MatchPreviewPage: React.FC = () => {
     return () => { cancelled = true; };
   }, [matchId, dispatch]);
 
-  // Build pitch players for home team
   const homePitchPlayers = useMemo(() => {
     if (!activeLineup?.home) return [];
     return buildPitchPlayers(
@@ -191,17 +174,14 @@ const MatchPreviewPage: React.FC = () => {
     );
   }, [activeLineup?.home]);
 
-  // Handle player swap (starter <-> bench)
   const handleSwap = useCallback(
     (playerId: number, isStarter: boolean, team: 'home' | 'away') => {
       if (!activeLineup) return;
 
       if (isStarter) {
-        // Select this starter for swapping
         setSelectedStarterId(playerId);
         setSwapTeam(team);
       } else if (selectedStarterId !== null && team === swapTeam) {
-        // Bench player clicked — perform the swap
         const side = activeLineup[team];
         const starterIdx = side.starting.findIndex(
           (l: MatchLineup) => l.player_id === selectedStarterId,
@@ -214,11 +194,9 @@ const MatchPreviewPage: React.FC = () => {
           const newStarting = [...side.starting];
           const newBench = [...side.bench];
 
-          // Swap the player entries
           const starterEntry = { ...newStarting[starterIdx] };
           const benchEntry = { ...newBench[benchIdx] };
 
-          // Swap: starter goes to bench, bench goes to starting
           newStarting[starterIdx] = {
             ...benchEntry,
             is_starting: true,
@@ -246,14 +224,12 @@ const MatchPreviewPage: React.FC = () => {
 
         setSelectedStarterId(null);
       } else {
-        // Different team or no starter selected — just select nothing
         setSelectedStarterId(null);
       }
     },
     [activeLineup, selectedStarterId, swapTeam],
   );
 
-  // Save lineup
   const handleSaveLineup = useCallback(async () => {
     if (!activeLineup) return;
 
@@ -274,7 +250,6 @@ const MatchPreviewPage: React.FC = () => {
         starting: homeStarting,
         bench: homeBench,
       });
-      // Also dispatch Redux action
       try {
         dispatch(
           saveMatchLineup({
@@ -304,8 +279,8 @@ const MatchPreviewPage: React.FC = () => {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-          <Spinner />
-          <p className="text-gray-400 text-sm">Loading match preview...</p>
+          <Spinner color="white" />
+          <p className="text-gray-400 text-body-sm">Loading match preview...</p>
         </div>
       </div>
     );
@@ -314,15 +289,16 @@ const MatchPreviewPage: React.FC = () => {
   if (error && !activeMatch) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center px-4">
-        <div className="bg-red-900/50 border border-red-700 rounded-lg p-6 text-red-300 max-w-md text-center">
-          <p className="font-semibold text-lg">Error</p>
-          <p className="text-sm mt-2">{error}</p>
-          <button
+        <div className="bg-red-900/30 border border-red-700/50 rounded-2xl p-6 text-red-300 max-w-md text-center">
+          <p className="text-heading-3">Error</p>
+          <p className="text-body-sm mt-2">{error}</p>
+          <Button
+            variant="ghost"
             onClick={() => navigate(-1)}
-            className="mt-4 px-4 py-2 bg-gray-700 rounded text-gray-300 text-sm"
+            className="mt-4 text-gray-300 hover:text-white hover:bg-gray-800"
           >
             Go Back
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -337,8 +313,8 @@ const MatchPreviewPage: React.FC = () => {
     <div className="min-h-screen bg-gray-900 text-white">
       {/* Match Header */}
       <div className="px-4 pt-6 pb-4">
-        <div className="bg-gray-800 rounded-lg p-6 text-center">
-          <p className="text-sm text-gray-400 uppercase tracking-wider mb-2">
+        <div className="bg-gray-800/80 backdrop-blur-sm rounded-2xl border border-gray-700/50 p-6 text-center">
+          <p className="text-overline text-gray-400 uppercase tracking-wider mb-2">
             Match Preview
           </p>
           <div className="flex items-center justify-center gap-6">
@@ -350,7 +326,7 @@ const MatchPreviewPage: React.FC = () => {
                 {homeTeam?.name ?? 'Home'}
               </h2>
               {activeLineup?.home?.formation && (
-                <p className="text-sm text-gray-400 mt-1">
+                <p className="text-body-sm text-gray-400 mt-1">
                   {activeLineup.home.formation.name}
                 </p>
               )}
@@ -364,14 +340,13 @@ const MatchPreviewPage: React.FC = () => {
                 {awayTeam?.name ?? 'Away'}
               </h2>
               {activeLineup?.away?.formation && (
-                <p className="text-sm text-gray-400 mt-1">
+                <p className="text-body-sm text-gray-400 mt-1">
                   {activeLineup.away.formation.name}
                 </p>
               )}
             </div>
           </div>
-          {/* Match info row */}
-          <div className="mt-3 flex items-center justify-center gap-4 text-sm text-gray-500">
+          <div className="mt-3 flex items-center justify-center gap-4 text-body-sm text-gray-500">
             {activeMatch?.match_date && (
               <span>
                 {new Date(activeMatch.match_date).toLocaleDateString('en-GB', {
@@ -392,8 +367,8 @@ const MatchPreviewPage: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Left: Pitch */}
           <div>
-            <div className="bg-gray-800 rounded-lg p-3">
-              <h3 className="text-sm text-gray-400 uppercase tracking-wider mb-2 px-1">
+            <div className="bg-gray-800/60 rounded-2xl border border-gray-700/40 p-3">
+              <h3 className="text-overline text-gray-400 uppercase tracking-wider mb-2 px-1">
                 Home Formation
               </h3>
               <Pitch2D
@@ -410,8 +385,8 @@ const MatchPreviewPage: React.FC = () => {
           {/* Right: Lineup lists */}
           <div className="space-y-4">
             {/* Home Starting XI */}
-            <div className="bg-gray-800 rounded-lg p-4">
-              <h3 className="text-sm font-semibold uppercase tracking-wider mb-3" style={{ color: homeColor }}>
+            <div className="bg-gray-800/80 rounded-xl border border-gray-700/40 p-4">
+              <h3 className="text-overline font-semibold uppercase tracking-wider mb-3" style={{ color: homeColor }}>
                 {homeTeam?.name ?? 'Home'} — Starting XI
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -421,10 +396,10 @@ const MatchPreviewPage: React.FC = () => {
                     <button
                       key={ml.player_id}
                       onClick={() => handleSwap(ml.player_id, true, 'home')}
-                      className={`flex items-center gap-2 p-2 rounded-md text-left transition-colors ${
+                      className={`flex items-center gap-2 p-2 rounded-lg text-left transition-all duration-150 ${
                         isSelected
-                          ? 'bg-green-800 border border-green-500'
-                          : 'bg-gray-700 border border-transparent hover:border-gray-500'
+                          ? 'bg-brand-900/50 border border-brand-500 shadow-sm'
+                          : 'bg-gray-700/60 border border-gray-600/40 hover:border-gray-500'
                       }`}
                     >
                       <span
@@ -434,10 +409,10 @@ const MatchPreviewPage: React.FC = () => {
                         {ml.player?.shirt_number ?? ml.sort_order}
                       </span>
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-white truncate">
+                        <p className="text-body font-medium text-white truncate">
                           {ml.player?.full_name ?? `Player ${ml.player_id}`}
                         </p>
-                        <p className="text-xs text-gray-400">{ml.position}</p>
+                        <p className="text-caption text-gray-400">{ml.position}</p>
                       </div>
                     </button>
                   );
@@ -446,8 +421,8 @@ const MatchPreviewPage: React.FC = () => {
             </div>
 
             {/* Home Bench */}
-            <div className="bg-gray-800 rounded-lg p-4">
-              <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">
+            <div className="bg-gray-800/80 rounded-xl border border-gray-700/40 p-4">
+              <h3 className="text-overline font-semibold text-gray-400 uppercase tracking-wider mb-3">
                 Bench
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -455,20 +430,20 @@ const MatchPreviewPage: React.FC = () => {
                   <button
                     key={ml.player_id}
                     onClick={() => handleSwap(ml.player_id, false, 'home')}
-                    className={`flex items-center gap-2 p-2 rounded-md text-left transition-colors ${
+                    className={`flex items-center gap-2 p-2 rounded-lg text-left transition-all duration-150 ${
                       selectedStarterId
-                        ? 'bg-gray-700 border border-yellow-600 hover:bg-yellow-900/30 cursor-pointer'
-                        : 'bg-gray-700/50 border border-transparent'
+                        ? 'bg-gray-700/60 border border-amber-500/60 hover:bg-amber-900/20 cursor-pointer'
+                        : 'bg-gray-700/40 border border-transparent'
                     }`}
                   >
                     <span className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white bg-gray-600">
                       {ml.player?.shirt_number ?? ml.sort_order}
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-gray-300 truncate">
+                      <p className="text-body font-medium text-gray-300 truncate">
                         {ml.player?.full_name ?? `Player ${ml.player_id}`}
                       </p>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-caption text-gray-500">
                         {ml.player?.primary_position?.short_name ?? 'SUB'}
                       </p>
                     </div>
@@ -476,23 +451,23 @@ const MatchPreviewPage: React.FC = () => {
                 ))}
               </div>
               {selectedStarterId && (
-                <p className="text-xs text-yellow-400 mt-2">
+                <p className="text-caption text-amber-400 mt-2">
                   Click a bench player to swap with the selected starter
                 </p>
               )}
             </div>
 
-            {/* Away Starting XI (read-only display) */}
+            {/* Away Starting XI */}
             {activeLineup?.away && (
-              <div className="bg-gray-800 rounded-lg p-4">
-                <h3 className="text-sm font-semibold uppercase tracking-wider mb-3" style={{ color: awayColor }}>
+              <div className="bg-gray-800/80 rounded-xl border border-gray-700/40 p-4">
+                <h3 className="text-overline font-semibold uppercase tracking-wider mb-3" style={{ color: awayColor }}>
                   {awayTeam?.name ?? 'Away'} — Starting XI
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {activeLineup.away.starting.map((ml: MatchLineup) => (
                     <div
                       key={ml.player_id}
-                      className="flex items-center gap-2 p-2 rounded-md bg-gray-700/50"
+                      className="flex items-center gap-2 p-2 rounded-lg bg-gray-700/40"
                     >
                       <span
                         className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
@@ -501,10 +476,10 @@ const MatchPreviewPage: React.FC = () => {
                         {ml.player?.shirt_number ?? ml.sort_order}
                       </span>
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-gray-300 truncate">
+                        <p className="text-body font-medium text-gray-300 truncate">
                           {ml.player?.full_name ?? `Player ${ml.player_id}`}
                         </p>
-                        <p className="text-xs text-gray-500">{ml.position}</p>
+                        <p className="text-caption text-gray-500">{ml.position}</p>
                       </div>
                     </div>
                   ))}
@@ -518,22 +493,26 @@ const MatchPreviewPage: React.FC = () => {
       {/* Action buttons */}
       <div className="px-4 pb-8">
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-          <button
+          <Button
+            variant="outline"
+            size="lg"
             onClick={handleSaveLineup}
-            disabled={saving}
-            className="w-full sm:w-auto px-8 py-3 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 rounded-lg text-white font-semibold transition-colors"
+            isLoading={saving}
+            className="w-full sm:w-auto border-gray-600 text-gray-200 hover:bg-gray-800 hover:border-gray-500"
           >
-            {saving ? 'Saving...' : 'Save Lineup'}
-          </button>
-          <button
+            Save Lineup
+          </Button>
+          <Button
+            variant="primary"
+            size="lg"
             onClick={() => navigate(`/match/${matchId}/live`)}
-            className="w-full sm:w-auto px-8 py-3 bg-green-600 hover:bg-green-500 rounded-lg text-white font-bold text-lg transition-colors"
+            className="w-full sm:w-auto text-lg font-bold"
           >
             Start Match
-          </button>
+          </Button>
         </div>
         {error && (
-          <p className="text-red-400 text-sm text-center mt-3">{error}</p>
+          <p className="text-red-400 text-body-sm text-center mt-3">{error}</p>
         )}
       </div>
     </div>

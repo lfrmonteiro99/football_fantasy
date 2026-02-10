@@ -502,7 +502,7 @@ export async function getMatchTactics(matchId: number) {
  */
 export function createSimulationStream(
   matchId: number,
-  speed: 'realtime' | 'fast' | 'instant' = 'fast',
+  speed: 'slow' | 'realtime' | 'fast' | 'instant' = 'slow',
 ): {
   /** Async generator yielding parsed SSE frames. */
   stream: () => AsyncGenerator<{ event: string; data: unknown }>;

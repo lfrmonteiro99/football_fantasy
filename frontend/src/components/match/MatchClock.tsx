@@ -1,16 +1,11 @@
 import React from 'react';
 
-// ---------------------------------------------------------------------------
-// MatchClock — Large minute display with phase indicator
-// ---------------------------------------------------------------------------
-
 export interface MatchClockProps {
   minute: number;
   phase: string;
   isRunning: boolean;
 }
 
-/** Map simulation phase to display label */
 function phaseLabel(phase: string): string {
   switch (phase) {
     case 'kickoff':
@@ -20,11 +15,9 @@ function phaseLabel(phase: string): string {
     case 'full_time':
       return 'FT';
     default: {
-      // open_play, attack_home, attack_away, set_piece
       if (phase.includes('half_time')) return 'HT';
       if (phase.includes('full_time')) return 'FT';
-      // Determine half from minute
-      return ''; // Will be filled by the component
+      return '';
     }
   }
 }
@@ -45,7 +38,6 @@ const MatchClock: React.FC<MatchClockProps> = ({
   const isHalfTime = phase === 'half_time';
   const isFullTime = phase === 'full_time';
 
-  // Determine clock text
   let clockText: string;
   if (isHalfTime) {
     clockText = 'HT';
@@ -55,7 +47,6 @@ const MatchClock: React.FC<MatchClockProps> = ({
     clockText = `${minute}'`;
   }
 
-  // Phase badge color
   let phaseColorClass = 'text-gray-400';
   if (isHalfTime) {
     phaseColorClass = 'text-amber-400';
@@ -64,8 +55,7 @@ const MatchClock: React.FC<MatchClockProps> = ({
   }
 
   return (
-    <div className="flex flex-col items-center justify-center py-3">
-      {/* Main minute display */}
+    <div className="flex flex-col items-center justify-center py-4">
       <div className="relative">
         <span
           className={`text-5xl md:text-6xl font-extrabold tabular-nums ${
@@ -79,7 +69,6 @@ const MatchClock: React.FC<MatchClockProps> = ({
           {clockText}
         </span>
 
-        {/* Pulsing dot when running */}
         {isRunning && !isHalfTime && !isFullTime && (
           <span className="absolute -top-1 -right-3 flex h-3 w-3">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
@@ -88,8 +77,7 @@ const MatchClock: React.FC<MatchClockProps> = ({
         )}
       </div>
 
-      {/* Phase label */}
-      <span className={`mt-1 text-sm font-medium ${phaseColorClass}`}>
+      <span className={`mt-1 text-body font-medium ${phaseColorClass}`}>
         {displayPhase}
       </span>
     </div>

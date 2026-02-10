@@ -4,7 +4,8 @@ import { useAppSelector, useAppDispatch } from 'store';
 import { fetchTeamMatches } from 'store/matchSlice';
 import Badge from 'components/common/Badge';
 import Button from 'components/common/Button';
-import Spinner from 'components/common/Spinner';
+import Skeleton from 'components/common/Skeleton';
+import EmptyState from 'components/common/EmptyState';
 import { formatDate } from 'utils/helpers';
 import type { Match, FormResult } from 'types';
 
@@ -158,8 +159,34 @@ const CalendarPage: React.FC = () => {
     matchState.teamMatches.length === 0
   ) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Spinner size="lg" />
+      <div className="space-y-6">
+        <div>
+          <Skeleton className="h-9 w-56 mb-2" />
+          <Skeleton className="h-4 w-40" />
+        </div>
+        <div className="flex gap-1">
+          <Skeleton className="h-9 w-16 rounded-md" />
+          <Skeleton className="h-9 w-24 rounded-md" />
+          <Skeleton className="h-9 w-24 rounded-md" />
+        </div>
+        <div className="space-y-6">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <div key={i}>
+              <Skeleton className="h-6 w-36 mb-3" />
+              <div className="rounded-xl border border-gray-200/60 bg-white shadow-card divide-y divide-gray-100">
+                {Array.from({ length: 4 }).map((_, j) => (
+                  <div key={j} className="flex items-center justify-between px-4 py-3">
+                    <div className="flex items-center gap-4">
+                      <Skeleton className="h-4 w-24" />
+                      <Skeleton className="h-4 w-32" />
+                    </div>
+                    <Skeleton className="h-4 w-16" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
@@ -168,8 +195,8 @@ const CalendarPage: React.FC = () => {
     <div className="space-y-6">
       {/* Title */}
       <div>
-        <h2 className="text-2xl font-bold text-gray-900">Match Calendar</h2>
-        <p className="text-sm text-gray-500 mt-1">
+        <h2 className="font-display text-display uppercase tracking-tight text-navy-900">Match Calendar</h2>
+        <p className="text-body text-navy-500 mt-1">
           {auth.user?.managed_team?.name
             ? `${auth.user.managed_team.name} fixtures`
             : 'Your team fixtures'}
@@ -177,15 +204,15 @@ const CalendarPage: React.FC = () => {
       </div>
 
       {/* Filter Tabs */}
-      <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1 w-fit">
+      <div className="inline-flex rounded-lg bg-navy-50 p-1">
         {filterTabs.map((tab) => (
           <button
             key={tab.key}
             onClick={() => setActiveFilter(tab.key)}
-            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+            className={`rounded-md px-4 py-1.5 text-body-sm font-medium transition-all ${
               activeFilter === tab.key
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-500 hover:text-gray-700'
+                ? 'bg-navy-900 text-white shadow-sm'
+                : 'text-navy-400 hover:text-navy-600'
             }`}
           >
             {tab.label}
@@ -195,22 +222,23 @@ const CalendarPage: React.FC = () => {
 
       {/* Match Groups */}
       {monthGroups.length === 0 ? (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
-          <p className="text-sm text-gray-500">
-            No matches found for the selected filter.
-          </p>
+        <div className="rounded-xl border border-surface-border bg-white shadow-card">
+          <EmptyState
+            title="No matches found"
+            description="No matches found for the selected filter."
+          />
         </div>
       ) : (
         <div className="space-y-6">
           {monthGroups.map((group) => (
             <div key={group.key}>
               {/* Month Header */}
-              <h3 className="text-lg font-semibold text-gray-800 mb-3">
+              <h3 className="font-display text-lg font-bold uppercase tracking-wide text-navy-800 mb-3">
                 {group.label}
               </h3>
 
               {/* Matches in this month */}
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 divide-y divide-gray-100">
+              <div className="rounded-xl border border-surface-border bg-white shadow-card divide-y divide-surface-border-subtle">
                 {group.matches.map((m) => {
                   const opponent = getOpponentInfo(m);
                   const result = getMatchResult(m);
@@ -219,21 +247,21 @@ const CalendarPage: React.FC = () => {
                   return (
                     <div
                       key={m.id}
-                      className={`flex items-center justify-between px-4 py-3 transition-colors hover:bg-gray-50 ${
-                        isNext ? 'border-l-4 border-l-green-500' : ''
+                      className={`flex items-center justify-between hover:bg-surface-secondary hover:translate-x-0.5 transition-all duration-250 ease-spring px-4 py-3 ${
+                        isNext ? 'border-l-4 border-accent-400 bg-accent-50/30' : ''
                       }`}
                     >
                       {/* Left: Date + Opponent */}
                       <div className="flex items-center gap-4 min-w-0">
-                        <span className="text-sm text-gray-500 w-28 flex-shrink-0">
+                        <span className="text-body-sm text-navy-500 font-mono w-28 flex-shrink-0">
                           {formatMatchDate(m.match_date)}
                         </span>
                         <div className="flex items-center gap-2 min-w-0">
-                          <span className="text-sm font-medium text-gray-900 truncate">
+                          <span className="text-body font-medium text-navy-900 truncate">
                             {opponent.side === 'H' ? 'vs' : 'at'}{' '}
                             {opponent.name}
                           </span>
-                          <span className="text-xs text-gray-400 flex-shrink-0">
+                          <span className="text-caption text-navy-400 flex-shrink-0">
                             ({opponent.side})
                           </span>
                           {isNext && (
@@ -252,7 +280,7 @@ const CalendarPage: React.FC = () => {
                       <div className="flex items-center gap-3 flex-shrink-0 ml-4">
                         {m.status === 'completed' && result ? (
                           <>
-                            <span className="text-sm font-medium text-gray-900">
+                            <span className="font-display text-body font-bold text-navy-900">
                               {result.score}
                             </span>
                             <Badge
@@ -273,7 +301,7 @@ const CalendarPage: React.FC = () => {
                           </Badge>
                         ) : (
                           <>
-                            <span className="text-sm text-gray-400">
+                            <span className="text-body-sm text-navy-400">
                               Scheduled
                             </span>
                             {isNext && (

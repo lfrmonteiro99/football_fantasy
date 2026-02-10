@@ -3,6 +3,7 @@ import clsx from 'clsx';
 
 interface SpinnerProps {
   size?: 'sm' | 'md' | 'lg';
+  color?: 'brand' | 'gray' | 'white';
   className?: string;
 }
 
@@ -12,12 +13,19 @@ const sizeClasses: Record<string, string> = {
   lg: 'h-10 w-10 border-3',
 };
 
-export default function Spinner({ size = 'md', className }: SpinnerProps) {
+const colorClasses: Record<string, string> = {
+  brand: 'border-brand-600 border-t-transparent',
+  gray: 'border-gray-400 border-t-transparent',
+  white: 'border-white border-t-transparent',
+};
+
+export default function Spinner({ size = 'md', color = 'brand', className }: SpinnerProps) {
   return (
     <div
       className={clsx(
-        'animate-spin rounded-full border-solid border-current border-t-transparent',
+        'animate-spin rounded-full border-solid',
         sizeClasses[size],
+        colorClasses[color],
         className,
       )}
       role="status"

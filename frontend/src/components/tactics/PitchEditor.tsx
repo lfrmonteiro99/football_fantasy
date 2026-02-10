@@ -19,6 +19,7 @@ interface PitchEditorProps {
   availablePlayers: SquadPlayer[];
   onPositionChange: (index: number, x: number, y: number) => void;
   onPlayerAssign: (positionIndex: number, playerId: number) => void;
+  onPositionSelect?: (index: number | null) => void;
   className?: string;
 }
 
@@ -40,6 +41,7 @@ const PitchEditor: React.FC<PitchEditorProps> = ({
   availablePlayers,
   onPositionChange,
   onPlayerAssign,
+  onPositionSelect,
   className = '',
 }) => {
   const [dragging, setDragging] = useState<number | null>(null);
@@ -94,16 +96,21 @@ const PitchEditor: React.FC<PitchEditorProps> = ({
       // Only treat as a click if we didn't just finish dragging
       if (dragging !== null) return;
       e.stopPropagation();
-      setSelectedPosition((prev) => (prev === index ? null : index));
+      setSelectedPosition((prev) => {
+        const next = prev === index ? null : index;
+        onPositionSelect?.(next);
+        return next;
+      });
     },
-    [dragging],
+    [dragging, onPositionSelect],
   );
 
   const handlePitchClick = useCallback(() => {
     if (dragging === null) {
       setSelectedPosition(null);
+      onPositionSelect?.(null);
     }
-  }, [dragging]);
+  }, [dragging, onPositionSelect]);
 
   // Map normalized x/y (0-100) to SVG coordinates
   const toSvgX = (v: number) => (v / 100) * PITCH_W;

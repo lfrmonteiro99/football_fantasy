@@ -1,14 +1,6 @@
 import React from 'react';
 import type { TeamMatchStats } from '../../types';
 
-// ---------------------------------------------------------------------------
-// LiveStats — Side-by-side stat comparison bars
-// ---------------------------------------------------------------------------
-// Displays each stat as a horizontal bar where:
-//   - Home grows left-to-right (blue)
-//   - Away grows right-to-left (red)
-// ---------------------------------------------------------------------------
-
 export interface LiveStatsProps {
   homeStats: TeamMatchStats;
   awayStats: TeamMatchStats;
@@ -20,7 +12,6 @@ interface StatRow {
   label: string;
   homeValue: number;
   awayValue: number;
-  /** If true, display as percentage (e.g. "58%") */
   isPercentage?: boolean;
 }
 
@@ -57,7 +48,6 @@ function buildRows(home: TeamMatchStats, away: TeamMatchStats): StatRow[] {
   ];
 }
 
-/** Calculate bar width percentage for a side */
 function barPct(homeVal: number, awayVal: number, side: 'home' | 'away'): number {
   const total = homeVal + awayVal;
   if (total === 0) return 50;
@@ -82,22 +72,19 @@ const StatBar: React.FC<{
 
   return (
     <div className="mb-3">
-      {/* Label row */}
       <div className="flex items-center justify-between mb-1">
-        <span className="text-sm font-semibold text-white tabular-nums w-10 text-left">
+        <span className="text-body-sm font-semibold text-white tabular-nums w-10 text-left">
           {homeDisplay}
         </span>
-        <span className="text-xs text-gray-400 uppercase tracking-wide">
+        <span className="text-caption text-gray-400 uppercase tracking-wide">
           {row.label}
         </span>
-        <span className="text-sm font-semibold text-white tabular-nums w-10 text-right">
+        <span className="text-body-sm font-semibold text-white tabular-nums w-10 text-right">
           {awayDisplay}
         </span>
       </div>
 
-      {/* Bar */}
-      <div className="flex h-2 rounded-full overflow-hidden bg-gray-700 gap-0.5">
-        {/* Home bar (left-to-right) */}
+      <div className="flex h-2.5 rounded-full overflow-hidden bg-gray-700/50 gap-0.5">
         <div
           className="rounded-l-full transition-all duration-500 ease-out"
           style={{
@@ -105,7 +92,6 @@ const StatBar: React.FC<{
             backgroundColor: homeColor,
           }}
         />
-        {/* Away bar (right-to-left) */}
         <div
           className="rounded-r-full transition-all duration-500 ease-out"
           style={{
@@ -127,8 +113,8 @@ const LiveStats: React.FC<LiveStatsProps> = ({
   const rows = buildRows(homeStats, awayStats);
 
   return (
-    <div className="bg-gray-800 rounded-lg p-4">
-      <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">
+    <div className="bg-gray-800/80 rounded-xl border border-gray-700/40 p-4">
+      <h3 className="text-overline text-gray-400 uppercase tracking-wider mb-3">
         Match Statistics
       </h3>
       {rows.map((row) => (

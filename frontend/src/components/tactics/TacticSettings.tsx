@@ -36,16 +36,16 @@ const FiveStepSlider: React.FC<FiveStepSliderProps> = ({
   options,
   onChange,
   label,
-  activeColor = 'bg-green-600 text-white',
+  activeColor = 'bg-brand-600 text-white',
 }) => (
   <div className="mb-4">
-    <label className="text-sm font-medium text-gray-700">{label}</label>
+    <label className="text-body-sm font-medium text-gray-700">{label}</label>
     <div className="flex gap-1 mt-1">
       {options.map((opt) => (
         <button
           key={opt}
           type="button"
-          className={`flex-1 py-2 text-xs rounded transition-colors ${
+          className={`flex-1 py-2 text-caption rounded-lg transition-all duration-150 ${
             value === opt
               ? activeColor
               : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -119,9 +119,9 @@ const Toggle: React.FC<ToggleProps> = ({ label, checked, onChange }) => (
       type="checkbox"
       checked={checked}
       onChange={(e) => onChange(e.target.checked)}
-      className="w-4 h-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
+      className="w-4 h-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
     />
-    <span className="text-sm text-gray-700">
+    <span className="text-body-sm text-gray-700">
       {label.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
     </span>
   </label>
@@ -163,13 +163,13 @@ const TacticSettings: React.FC<TacticSettingsProps> = ({
     <div className="space-y-6">
       {/* Mentality */}
       <div>
-        <label className="text-sm font-medium text-gray-700">Mentality</label>
+        <label className="text-body-sm font-medium text-gray-700">Mentality</label>
         <div className="flex gap-1 mt-1">
           {MENTALITY_OPTIONS.map((opt) => (
             <button
               key={opt.value}
               type="button"
-              className={`flex-1 py-2 text-xs rounded transition-colors ${
+              className={`flex-1 py-2 text-caption rounded-lg transition-all duration-150 ${
                 tactic.mentality === opt.value
                   ? opt.color
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -216,7 +216,7 @@ const TacticSettings: React.FC<TacticSettingsProps> = ({
 
       {/* Toggles */}
       <div>
-        <label className="text-sm font-medium text-gray-700 mb-1 block">
+        <label className="text-body-sm font-medium text-gray-700 mb-1 block">
           Team Instructions
         </label>
         <div className="grid grid-cols-2 gap-x-4">
@@ -251,7 +251,7 @@ const TacticSettings: React.FC<TacticSettingsProps> = ({
       {/* Analysis section (read-only) */}
       {analysis && (
         <div className="border-t border-gray-200 pt-4">
-          <h4 className="text-sm font-semibold text-gray-700 mb-3">
+          <h4 className="text-body-sm font-semibold text-gray-700 mb-3">
             Tactical Analysis
           </h4>
 

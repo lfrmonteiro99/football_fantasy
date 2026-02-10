@@ -50,12 +50,12 @@ const PlayerCard: React.FC<PlayerCardProps> = ({
     <div
       onClick={onClick}
       className={`
-        flex items-center gap-2 rounded-lg border transition-all cursor-pointer
+        flex items-center gap-2 rounded-xl border transition-all duration-150 cursor-pointer
         ${isSm ? 'px-2 py-1.5' : 'px-3 py-2'}
         ${isSelected
-          ? 'border-green-500 bg-green-50 ring-2 ring-green-300'
-          : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'}
-        ${isAssigned ? 'opacity-40 pointer-events-none' : ''}
+          ? 'border-brand-500 bg-brand-50 ring-2 ring-brand-300'
+          : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-card'}
+        ${isAssigned ? 'opacity-50' : ''}
       `}
     >
       {/* Shirt number circle */}
@@ -70,7 +70,7 @@ const PlayerCard: React.FC<PlayerCardProps> = ({
 
       {/* Name + position */}
       <div className="flex-1 min-w-0">
-        <div className={`font-medium text-gray-900 truncate ${isSm ? 'text-xs' : 'text-sm'}`}>
+        <div className={`font-medium text-gray-900 truncate ${isSm ? 'text-caption' : 'text-body-sm'}`}>
           {player.full_name}
         </div>
         <div className="flex items-center gap-1.5">

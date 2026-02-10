@@ -3,6 +3,7 @@ import { getPlayerAttributes } from '../../api/endpoints';
 import type { PlayerAttributesByCategory, Player } from '../../types';
 import { formatCurrency } from '../../utils/helpers';
 import AttributeRadar from './AttributeRadar';
+import Spinner from '../common/Spinner';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -153,16 +154,16 @@ const PlayerDetail: React.FC<PlayerDetailProps> = ({ playerId, onClose }) => {
     <div className="fixed inset-0 z-50 flex justify-end">
       {/* Overlay */}
       <div
-        className="absolute inset-0 bg-black/40"
+        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
         onClick={onClose}
       />
 
       {/* Slide-out panel */}
-      <div className="relative w-full max-w-lg bg-white shadow-xl overflow-y-auto animate-slide-in">
+      <div className="relative w-full max-w-lg bg-white shadow-modal overflow-y-auto animate-slide-in-right">
         {/* Close button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 p-2 rounded-full hover:bg-gray-100 text-gray-500 z-10"
+          className="absolute top-4 right-4 p-2 rounded-lg hover:bg-gray-100 text-gray-500 z-10 transition-colors duration-150"
           aria-label="Close"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -172,14 +173,14 @@ const PlayerDetail: React.FC<PlayerDetailProps> = ({ playerId, onClose }) => {
 
         {loading && (
           <div className="flex items-center justify-center h-64">
-            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-green-600" />
+            <Spinner color="brand" />
           </div>
         )}
 
         {error && (
           <div className="p-6 text-center text-red-600">
             <p className="font-medium">Error loading player</p>
-            <p className="text-sm mt-1">{error}</p>
+            <p className="text-body-sm mt-1">{error}</p>
           </div>
         )}
 
@@ -189,15 +190,15 @@ const PlayerDetail: React.FC<PlayerDetailProps> = ({ playerId, onClose }) => {
             <div className="mb-6">
               <div className="flex items-center gap-3 mb-2">
                 {player.shirt_number != null && (
-                  <span className="flex items-center justify-center w-10 h-10 rounded-full bg-green-600 text-white text-lg font-bold">
+                  <span className="flex items-center justify-center w-10 h-10 rounded-xl bg-brand-600 text-white text-lg font-bold">
                     {player.shirt_number}
                   </span>
                 )}
                 <div>
-                  <h2 className="text-xl font-bold text-gray-900">
+                  <h2 className="text-heading-2 text-gray-900">
                     {player.full_name}
                   </h2>
-                  <p className="text-sm text-gray-500">
+                  <p className="text-body-sm text-gray-500">
                     {player.primary_position?.name ?? 'Unknown Position'}
                     {player.team?.name ? ` \u2022 ${player.team.name}` : ''}
                   </p>
@@ -206,14 +207,14 @@ const PlayerDetail: React.FC<PlayerDetailProps> = ({ playerId, onClose }) => {
 
               {/* Overall ratings */}
               <div className="flex gap-4 mt-3">
-                <div className="px-3 py-1.5 bg-green-50 rounded-lg text-center">
-                  <div className="text-xs text-gray-500">Current</div>
-                  <div className="text-lg font-bold text-green-700">
+                <div className="px-3 py-1.5 bg-brand-50 rounded-xl text-center">
+                  <div className="text-caption text-gray-500">Current</div>
+                  <div className="text-lg font-bold text-brand-700">
                     {data.overall_ratings.current_ability}
                   </div>
                 </div>
-                <div className="px-3 py-1.5 bg-blue-50 rounded-lg text-center">
-                  <div className="text-xs text-gray-500">Potential</div>
+                <div className="px-3 py-1.5 bg-blue-50 rounded-xl text-center">
+                  <div className="text-caption text-gray-500">Potential</div>
                   <div className="text-lg font-bold text-blue-700">
                     {data.overall_ratings.potential_ability}
                   </div>
@@ -231,16 +232,16 @@ const PlayerDetail: React.FC<PlayerDetailProps> = ({ playerId, onClose }) => {
                 { label: 'Foot', value: player.preferred_foot.charAt(0).toUpperCase() + player.preferred_foot.slice(1) },
                 { label: 'Value', value: formatCurrency(player.market_value) },
               ].map((item) => (
-                <div key={item.label} className="bg-gray-50 rounded-lg px-3 py-2">
-                  <div className="text-xs text-gray-500">{item.label}</div>
-                  <div className="text-sm font-medium text-gray-900">{item.value}</div>
+                <div key={item.label} className="bg-gray-50 rounded-xl px-3 py-2">
+                  <div className="text-caption text-gray-500">{item.label}</div>
+                  <div className="text-body-sm font-medium text-gray-900">{item.value}</div>
                 </div>
               ))}
             </div>
 
             {/* Radar chart */}
             <div className="mb-6">
-              <h3 className="text-sm font-semibold text-gray-700 mb-2">
+              <h3 className="text-body-sm font-semibold text-gray-700 mb-2">
                 Key Attributes
               </h3>
               <div className="flex justify-center">
@@ -269,7 +270,7 @@ const PlayerDetail: React.FC<PlayerDetailProps> = ({ playerId, onClose }) => {
 
               return (
                 <div key={cat.label} className="mb-5">
-                  <h3 className="text-sm font-semibold text-gray-700 mb-2">
+                  <h3 className="text-body-sm font-semibold text-gray-700 mb-2">
                     {cat.label}
                   </h3>
                   <div className="space-y-1.5">
@@ -278,7 +279,7 @@ const PlayerDetail: React.FC<PlayerDetailProps> = ({ playerId, onClose }) => {
                       const pct = (val / 20) * 100;
                       return (
                         <div key={key} className="flex items-center gap-2">
-                          <span className="text-xs text-gray-600 w-28 truncate">
+                          <span className="text-caption text-gray-600 w-28 truncate">
                             {formatAttrName(key)}
                           </span>
                           <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
@@ -288,7 +289,7 @@ const PlayerDetail: React.FC<PlayerDetailProps> = ({ playerId, onClose }) => {
                             />
                           </div>
                           <span
-                            className={`text-xs font-semibold w-6 text-right ${attrTextColor(val)}`}
+                            className={`text-caption font-semibold w-6 text-right ${attrTextColor(val)}`}
                           >
                             {val}
                           </span>
@@ -303,16 +304,6 @@ const PlayerDetail: React.FC<PlayerDetailProps> = ({ playerId, onClose }) => {
         )}
       </div>
 
-      {/* Inline animation keyframe */}
-      <style>{`
-        @keyframes slide-in {
-          from { transform: translateX(100%); }
-          to { transform: translateX(0); }
-        }
-        .animate-slide-in {
-          animation: slide-in 0.25s ease-out;
-        }
-      `}</style>
     </div>
   );
 };

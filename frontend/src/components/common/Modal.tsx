@@ -6,7 +6,8 @@ interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
   title?: string;
-  size?: 'sm' | 'md' | 'lg';
+  description?: string;
+  size?: 'sm' | 'md' | 'lg' | 'xl';
   children: React.ReactNode;
 }
 
@@ -14,12 +15,14 @@ const sizeClasses: Record<string, string> = {
   sm: 'max-w-sm',
   md: 'max-w-lg',
   lg: 'max-w-2xl',
+  xl: 'max-w-4xl',
 };
 
 export default function Modal({
   isOpen,
   onClose,
   title,
+  description,
   size = 'md',
   children,
 }: ModalProps) {
@@ -45,16 +48,14 @@ export default function Modal({
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/50 transition-opacity"
+        className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm transition-opacity"
         onClick={onClose}
         aria-hidden="true"
       />
-      {/* Content */}
       <div
         className={clsx(
-          'relative z-10 w-full rounded-lg bg-white p-6 shadow-xl',
+          'relative z-10 w-full rounded-2xl bg-white p-6 shadow-modal animate-slide-in-up',
           sizeClasses[size],
           'mx-4',
         )}
@@ -63,13 +64,18 @@ export default function Modal({
         aria-labelledby={title ? 'modal-title' : undefined}
       >
         {title && (
-          <div className="mb-4 flex items-center justify-between">
-            <h2 id="modal-title" className="text-lg font-semibold text-gray-900">
-              {title}
-            </h2>
+          <div className="mb-4 flex items-start justify-between">
+            <div>
+              <h2 id="modal-title" className="text-heading-2 text-gray-900">
+                {title}
+              </h2>
+              {description && (
+                <p className="mt-1 text-body-sm text-gray-500">{description}</p>
+              )}
+            </div>
             <button
               onClick={onClose}
-              className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+              className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors duration-150"
               aria-label="Close"
             >
               <svg

@@ -112,7 +112,7 @@ export type SSEEventName =
   | 'error';
 
 /** SSE speed parameter. */
-export type SimulationSpeed = 'realtime' | 'fast' | 'instant';
+export type SimulationSpeed = 'slow' | 'realtime' | 'fast' | 'instant';
 
 /** Approach play setting. */
 export type ApproachPlay = 'more_direct' | 'balanced' | 'patient';

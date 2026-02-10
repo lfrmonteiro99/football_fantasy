@@ -299,6 +299,26 @@ class MatchController extends Controller
     {
         $match->load(['homeTeam', 'awayTeam', 'homeFormation', 'awayFormation']);
 
+        // Resolve formation: match-level first, then team's primary tactic formation
+        $homeFormation = $match->homeFormation;
+        $awayFormation = $match->awayFormation;
+
+        // Fall back to team's primary tactic formation via pivot table
+        if (!$homeFormation && $match->homeTeam) {
+            $primaryTactic = $match->homeTeam->tactics()
+                ->wherePivot('is_primary', true)
+                ->with('formation')
+                ->first();
+            $homeFormation = $primaryTactic ? $primaryTactic->formation : null;
+        }
+        if (!$awayFormation && $match->awayTeam) {
+            $primaryTactic = $match->awayTeam->tactics()
+                ->wherePivot('is_primary', true)
+                ->with('formation')
+                ->first();
+            $awayFormation = $primaryTactic ? $primaryTactic->formation : null;
+        }
+
         $homeLineup = MatchLineup::where('match_id', $match->id)
             ->where('team_id', $match->home_team_id)
             ->with('player.attributes', 'player.primaryPosition')
@@ -311,12 +331,12 @@ class MatchController extends Controller
             ->orderBy('sort_order')
             ->get();
 
-        // If no lineup exists, generate a suggested one
-        if ($homeLineup->isEmpty() && $match->homeFormation) {
-            $homeLineup = $this->suggestLineup($match->homeTeam, $match->homeFormation, $match->id);
+        // If no lineup exists, generate a suggested one from the resolved formation
+        if ($homeLineup->isEmpty() && $homeFormation) {
+            $homeLineup = $this->suggestLineup($match->homeTeam, $homeFormation, $match->id);
         }
-        if ($awayLineup->isEmpty() && $match->awayFormation) {
-            $awayLineup = $this->suggestLineup($match->awayTeam, $match->awayFormation, $match->id);
+        if ($awayLineup->isEmpty() && $awayFormation) {
+            $awayLineup = $this->suggestLineup($match->awayTeam, $awayFormation, $match->id);
         }
 
         return response()->json([
@@ -324,13 +344,13 @@ class MatchController extends Controller
             'data' => [
                 'home' => [
                     'team' => $match->homeTeam,
-                    'formation' => $match->homeFormation,
+                    'formation' => $homeFormation,
                     'starting' => $homeLineup->where('is_starting', true)->values(),
                     'bench' => $homeLineup->where('is_starting', false)->values(),
                 ],
                 'away' => [
                     'team' => $match->awayTeam,
-                    'formation' => $match->awayFormation,
+                    'formation' => $awayFormation,
                     'starting' => $awayLineup->where('is_starting', true)->values(),
                     'bench' => $awayLineup->where('is_starting', false)->values(),
                 ],

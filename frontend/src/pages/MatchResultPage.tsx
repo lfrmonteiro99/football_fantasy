@@ -6,6 +6,7 @@ import type { Match, TeamMatchStats } from '../types';
 import { useAppSelector, useAppDispatch } from '../store';
 import { fetchMatchDetails } from '../store/matchSlice';
 import Spinner from '../components/common/Spinner';
+import Button from '../components/common/Button';
 
 import ScoreBar from '../components/match/ScoreBar';
 import LiveStats from '../components/match/LiveStats';
@@ -93,8 +94,8 @@ const MatchResultPage: React.FC = () => {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-          <Spinner />
-          <p className="text-gray-400 text-sm">Loading match result...</p>
+          <Spinner color="white" />
+          <p className="text-gray-400 text-body-sm">Loading match result...</p>
         </div>
       </div>
     );
@@ -103,15 +104,17 @@ const MatchResultPage: React.FC = () => {
   if (error || !activeMatch) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center px-4">
-        <div className="bg-red-900/50 border border-red-700 rounded-lg p-6 text-red-300 max-w-md text-center">
+        <div className="bg-red-900/50 border border-red-700 rounded-2xl p-6 text-red-300 max-w-md text-center">
           <p className="font-semibold text-lg">Error</p>
-          <p className="text-sm mt-2">{error || 'Match not found'}</p>
-          <button
+          <p className="text-body-sm mt-2">{error || 'Match not found'}</p>
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => navigate(-1)}
-            className="mt-4 px-4 py-2 bg-gray-700 rounded text-gray-300 text-sm"
+            className="mt-4 border-gray-600 text-gray-300 hover:bg-gray-700"
           >
             Go Back
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -132,10 +135,10 @@ const MatchResultPage: React.FC = () => {
       {/* Header */}
       <div className="px-4 pt-6">
         <div className="text-center mb-4">
-          <p className="text-sm text-gray-400 uppercase tracking-wider">
+          <p className="text-overline text-gray-400">
             Full Time Result
           </p>
-          <p className="text-lg font-semibold text-green-400 mt-1">
+          <p className="text-heading-3 text-brand-400 mt-1">
             {resultText}
           </p>
         </div>
@@ -155,7 +158,7 @@ const MatchResultPage: React.FC = () => {
 
       {/* Match info */}
       <div className="px-4 py-2">
-        <div className="flex items-center justify-center gap-4 text-sm text-gray-500">
+        <div className="flex items-center justify-center gap-4 text-body-sm text-gray-500">
           {activeMatch.match_date && (
             <span>
               {new Date(activeMatch.match_date).toLocaleDateString('en-GB', {
@@ -184,8 +187,8 @@ const MatchResultPage: React.FC = () => {
             />
             {/* Override max-height for result page: show all events */}
             {timelineEvents.length === 0 && (
-              <div className="bg-gray-800 rounded-lg p-4 text-center text-gray-500">
-                <p>No detailed events available for this match.</p>
+              <div className="bg-gray-800/80 rounded-xl border border-gray-700/40 p-4 text-center text-gray-500">
+                <p className="text-body-sm">No detailed events available for this match.</p>
               </div>
             )}
           </div>
@@ -205,8 +208,8 @@ const MatchResultPage: React.FC = () => {
       {/* Goal scorers summary */}
       {timelineEvents.filter((e) => e.type === 'goal' || e.type === 'penalty').length > 0 && (
         <div className="px-4 pb-4">
-          <div className="bg-gray-800 rounded-lg p-4">
-            <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">
+          <div className="bg-gray-800/80 rounded-xl border border-gray-700/40 p-4">
+            <h3 className="text-overline text-gray-400 mb-3">
               Goals
             </h3>
             <div className="space-y-2">
@@ -251,19 +254,23 @@ const MatchResultPage: React.FC = () => {
       {/* Navigation buttons */}
       <div className="px-4 pb-8">
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-          <button
+          <Button
+            variant="outline"
+            size="lg"
             onClick={() => navigate('/')}
-            className="w-full sm:w-auto px-8 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg text-gray-300 font-semibold transition-colors"
+            className="w-full sm:w-auto border-gray-600 text-gray-300 hover:bg-gray-700"
           >
             Back to Dashboard
-          </button>
+          </Button>
           {activeMatch.league_id && (
-            <button
+            <Button
+              variant="primary"
+              size="lg"
               onClick={() => navigate(`/league/${activeMatch.league_id}/standings`)}
-              className="w-full sm:w-auto px-8 py-3 bg-blue-600 hover:bg-blue-500 rounded-lg text-white font-semibold transition-colors"
+              className="w-full sm:w-auto"
             >
               View League Table
-            </button>
+            </Button>
           )}
         </div>
       </div>

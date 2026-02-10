@@ -15,8 +15,9 @@ class SimulationStreamController extends Controller
 {
     /** Microsecond delays keyed by speed name. */
     private const SPEED_DELAYS = [
-        'realtime' => 1_000_000,  // 1 second per minute
-        'fast'     => 300_000,    // 300ms per minute
+        'slow'     => 5_000_000,  // 5 seconds per minute — fully readable
+        'realtime' => 2_500_000,  // 2.5 seconds per minute — comfortable pace
+        'fast'     => 500_000,    // 500ms per minute — quick overview
         'instant'  => 0,          // no delay
     ];
 

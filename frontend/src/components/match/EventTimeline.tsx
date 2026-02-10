@@ -1,14 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import type { SimulationTickEvent, MatchEventType } from '../../types';
 
-// ---------------------------------------------------------------------------
-// EventTimeline — Vertical scrollable list of key match events
-// ---------------------------------------------------------------------------
-// Filters to only show KEY events: goal, yellow_card, red_card, substitution,
-// penalty, penalty_miss, save. Minor events (pass, throw_in, etc.) are skipped.
-// Home events align LEFT, away events align RIGHT.
-// ---------------------------------------------------------------------------
-
 export interface TimelineEntry {
   minute: number;
   type: MatchEventType;
@@ -32,29 +24,27 @@ const KEY_EVENT_TYPES: Set<string> = new Set([
   'save',
 ]);
 
-/** Map event type to an icon string */
 function eventIcon(type: MatchEventType): string {
   switch (type) {
     case 'goal':
-      return '\u26BD'; // soccer ball
+      return '\u26BD';
     case 'yellow_card':
-      return '\uD83D\uDFE8'; // yellow square
+      return '\uD83D\uDFE8';
     case 'red_card':
-      return '\uD83D\uDFE5'; // red square
+      return '\uD83D\uDFE5';
     case 'substitution':
-      return '\uD83D\uDD04'; // arrows cycle
+      return '\uD83D\uDD04';
     case 'penalty':
-      return '\u26BD'; // same as goal
+      return '\u26BD';
     case 'penalty_miss':
-      return '\u274C'; // cross
+      return '\u274C';
     case 'save':
-      return '\uD83E\uDDE4'; // gloves
+      return '\uD83E\uDDE4';
     default:
-      return '\u25CF'; // dot
+      return '\u25CF';
   }
 }
 
-/** Map event type to a minute badge color */
 function minuteBadgeColor(type: MatchEventType): string {
   switch (type) {
     case 'goal':
@@ -75,10 +65,6 @@ function minuteBadgeColor(type: MatchEventType): string {
   }
 }
 
-/**
- * Convert SimulationTickEvents to timeline entries.
- * Utility exported for pages to use.
- */
 export function tickEventsToTimeline(
   tickEvents: { minute: number; events: SimulationTickEvent[] }[],
 ): TimelineEntry[] {
@@ -99,9 +85,6 @@ export function tickEventsToTimeline(
   return entries;
 }
 
-/**
- * Convert MatchEvent[] (from completed match) to timeline entries.
- */
 export function matchEventsToTimeline(
   events: { minute: number; event_type: MatchEventType; team_type: 'home' | 'away'; player_name: string; description: string }[],
 ): TimelineEntry[] {
@@ -123,18 +106,17 @@ const EventTimeline: React.FC<EventTimelineProps> = ({
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to latest event
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [events.length]);
 
   if (events.length === 0) {
     return (
-      <div className={`bg-gray-800 rounded-lg p-4 ${className}`}>
-        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">
+      <div className={`bg-gray-800/80 rounded-xl border border-gray-700/40 p-4 ${className}`}>
+        <h3 className="text-overline text-gray-400 uppercase tracking-wider mb-3">
           Key Events
         </h3>
-        <p className="text-gray-500 text-sm text-center py-4">
+        <p className="text-gray-500 text-body-sm text-center py-4">
           No key events yet
         </p>
       </div>
@@ -142,13 +124,13 @@ const EventTimeline: React.FC<EventTimelineProps> = ({
   }
 
   return (
-    <div className={`bg-gray-800 rounded-lg p-4 ${className}`}>
-      <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">
+    <div className={`bg-gray-800/80 rounded-xl border border-gray-700/40 p-4 ${className}`}>
+      <h3 className="text-overline text-gray-400 uppercase tracking-wider mb-3">
         Key Events
       </h3>
       <div
         ref={scrollRef}
-        className="max-h-64 overflow-y-auto space-y-2 pr-1 scrollbar-thin scrollbar-thumb-gray-600"
+        className="max-h-64 overflow-y-auto space-y-2 pr-1 dark-scrollbar"
       >
         {events.map((ev, idx) => {
           const isHome = ev.team === 'home';
@@ -159,9 +141,8 @@ const EventTimeline: React.FC<EventTimelineProps> = ({
                 isHome ? 'flex-row' : 'flex-row-reverse'
               }`}
             >
-              {/* Minute badge */}
               <div
-                className={`flex-shrink-0 w-9 h-9 rounded-full ${minuteBadgeColor(
+                className={`flex-shrink-0 w-10 h-10 rounded-xl ${minuteBadgeColor(
                   ev.type,
                 )} flex items-center justify-center`}
               >
@@ -170,7 +151,6 @@ const EventTimeline: React.FC<EventTimelineProps> = ({
                 </span>
               </div>
 
-              {/* Event content */}
               <div
                 className={`flex-1 min-w-0 ${
                   isHome ? 'text-left' : 'text-right'
@@ -180,11 +160,11 @@ const EventTimeline: React.FC<EventTimelineProps> = ({
                   style={{ justifyContent: isHome ? 'flex-start' : 'flex-end' }}
                 >
                   <span className="text-base">{eventIcon(ev.type)}</span>
-                  <span className="text-sm font-semibold text-white truncate">
+                  <span className="text-body font-semibold text-white truncate">
                     {ev.playerName || 'Unknown'}
                   </span>
                 </div>
-                <p className="text-xs text-gray-400 mt-0.5 line-clamp-2">
+                <p className="text-caption text-gray-400 mt-0.5 line-clamp-2">
                   {ev.description}
                 </p>
               </div>

@@ -22,6 +22,8 @@ import type {
 import PitchEditor from '../components/tactics/PitchEditor';
 import TacticSettings from '../components/tactics/TacticSettings';
 import PlayerCard from '../components/tactics/PlayerCard';
+import Button from '../components/common/Button';
+import Skeleton from '../components/common/Skeleton';
 
 // ---------------------------------------------------------------------------
 // Default tactic payload
@@ -211,17 +213,33 @@ const TacticsPage: React.FC = () => {
   const handlePlayerAssign = useCallback(
     (positionIndex: number, playerId: number) => {
       const player = squad.find((s) => s.id === playerId);
+
+      // Clear player from any previous position they were assigned to
       setEditorPositions((prev) =>
-        prev.map((p, i) =>
-          i === positionIndex
-            ? { ...p, playerId, playerName: player?.full_name }
-            : p,
-        ),
+        prev.map((p, i) => {
+          if (i === positionIndex) {
+            return { ...p, playerId, playerName: player?.full_name };
+          }
+          // Remove from old position if this player was elsewhere
+          if (p.playerId === playerId) {
+            return { ...p, playerId: undefined, playerName: undefined };
+          }
+          return p;
+        }),
       );
-      setPlayerAssignments((prev) => ({
-        ...prev,
-        [String(positionIndex)]: playerId,
-      }));
+
+      setPlayerAssignments((prev) => {
+        const next = { ...prev };
+        // Remove player from old position
+        for (const key of Object.keys(next)) {
+          if (next[key] === playerId) {
+            delete next[key];
+          }
+        }
+        next[String(positionIndex)] = playerId;
+        return next;
+      });
+
       setSelectedPitchPosition(null);
     },
     [squad],
@@ -350,11 +368,18 @@ const TacticsPage: React.FC = () => {
 
   if (teamLoading === 'loading' && teamTactics.length === 0 && squad.length === 0) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto" />
-          <p className="mt-4 text-gray-500">Loading tactics...</p>
+      <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+        <Skeleton className="h-9 w-48" />
+        <div className="flex gap-2">
+          <Skeleton className="h-9 w-24 rounded-lg" />
+          <Skeleton className="h-9 w-24 rounded-lg" />
+          <Skeleton className="h-9 w-28 rounded-lg" />
         </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Skeleton variant="rectangular" className="h-[400px] w-full" />
+          <Skeleton variant="rectangular" className="h-[400px] w-full" />
+        </div>
+        <Skeleton variant="rectangular" className="h-48 w-full" />
       </div>
     );
   }
@@ -362,23 +387,23 @@ const TacticsPage: React.FC = () => {
   return (
     <div className="max-w-7xl mx-auto px-4 py-6">
       {/* Header */}
-      <h1 className="text-2xl font-bold text-gray-900 mb-4">Tactics Editor</h1>
+      <h1 className="font-display text-display uppercase tracking-tight text-navy-900 mb-4">Tactics Editor</h1>
 
       {/* Tactic tabs */}
-      <div className="flex items-center gap-2 mb-6 overflow-x-auto pb-1">
+      <div className="inline-flex rounded-lg bg-navy-50 p-1 overflow-x-auto mb-6">
         {teamTactics.map((t) => (
           <button
             key={t.id}
             onClick={() => setActiveTabId(t.id)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
+            className={`rounded-md px-4 py-1.5 text-body-sm font-medium whitespace-nowrap transition-all ${
               activeTabId === t.id
-                ? 'bg-green-600 text-white shadow-sm'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                ? 'bg-navy-900 text-white shadow-sm'
+                : 'text-navy-400 hover:text-navy-600'
             }`}
           >
             {t.name}
             {t.pivot?.is_primary && (
-              <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-yellow-400 text-yellow-900">
+              <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-accent-400 text-accent-900 font-bold">
                 Primary
               </span>
             )}
@@ -386,10 +411,10 @@ const TacticsPage: React.FC = () => {
         ))}
         <button
           onClick={() => setActiveTabId('new')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
+          className={`rounded-md px-4 py-1.5 text-body-sm font-medium whitespace-nowrap transition-all ${
             activeTabId === 'new'
-              ? 'bg-green-600 text-white shadow-sm'
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              ? 'bg-navy-900 text-white shadow-sm'
+              : 'text-navy-400 hover:text-navy-600'
           }`}
         >
           + New Tactic
@@ -399,34 +424,35 @@ const TacticsPage: React.FC = () => {
       {/* Main editor layout */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         {/* Left: Pitch */}
-        <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+        <div className="rounded-xl border border-surface-border bg-white shadow-card p-5">
           <PitchEditor
             positions={editorPositions}
             availablePlayers={squad}
             onPositionChange={handlePositionChange}
             onPlayerAssign={handlePlayerAssign}
+            onPositionSelect={setSelectedPitchPosition}
           />
         </div>
 
         {/* Right: Settings panel */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm overflow-y-auto max-h-[700px]">
+        <div className="rounded-xl border border-surface-border bg-white shadow-card p-5 overflow-y-auto max-h-[700px]">
           {/* Tactic name */}
           <div className="mb-4">
-            <label className="text-sm font-medium text-gray-700 block mb-1">
+            <label className="font-display text-sm font-bold uppercase tracking-wider text-navy-800 block mb-1.5">
               Tactic Name
             </label>
             <input
               type="text"
               value={tacticForm.name ?? ''}
               onChange={(e) => handleTacticFieldChange('name', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+              className="input-base"
               placeholder="e.g. High Press 4-3-3"
             />
           </div>
 
           {/* Formation selector */}
           <div className="mb-6">
-            <label className="text-sm font-medium text-gray-700 block mb-1">
+            <label className="font-display text-sm font-bold uppercase tracking-wider text-navy-800 block mb-1.5">
               Formation
             </label>
             <select
@@ -436,7 +462,7 @@ const TacticsPage: React.FC = () => {
                 if (!isNaN(val)) handleFormationChange(val);
               }}
               disabled={loadingFormations}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+              className="input-base appearance-none"
             >
               <option value="">Select formation...</option>
               {formations.map((f) => (
@@ -455,33 +481,35 @@ const TacticsPage: React.FC = () => {
           />
 
           {/* Action buttons */}
-          <div className="flex items-center gap-3 mt-6 pt-4 border-t border-gray-200">
-            <button
+          <div className="flex items-center gap-3 mt-6 pt-4 border-t border-surface-border">
+            <Button
+              variant="primary"
               onClick={handleSave}
               disabled={saving}
-              className="flex-1 px-4 py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              isLoading={saving}
+              className="flex-1"
             >
-              {saving ? 'Saving...' : 'Save Tactic'}
-            </button>
+              Save Tactic
+            </Button>
             {typeof activeTabId === 'number' && activeTabId !== primaryTacticId && (
-              <button
+              <Button
+                variant="outline"
                 onClick={handleSetPrimary}
                 disabled={saving}
-                className="px-4 py-2.5 bg-yellow-500 text-white rounded-lg text-sm font-medium hover:bg-yellow-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Set as Primary
-              </button>
+              </Button>
             )}
           </div>
 
           {/* Feedback messages */}
           {saveError && (
-            <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+            <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-body-sm text-red-700">
               {saveError}
             </div>
           )}
           {saveSuccess && (
-            <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
+            <div className="mt-3 rounded-xl border border-green-200 bg-green-50 p-3 text-body-sm text-green-700">
               Tactic saved successfully.
             </div>
           )}
@@ -489,11 +517,11 @@ const TacticsPage: React.FC = () => {
       </div>
 
       {/* Bottom: Squad player cards for assignment */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-        <h3 className="text-sm font-semibold text-gray-700 mb-3">
+      <div className="rounded-xl border border-surface-border bg-white shadow-card p-5">
+        <h3 className="font-display text-base font-bold uppercase tracking-wide text-navy-800 mb-3">
           Squad Players
           {selectedPitchPosition !== null && (
-            <span className="ml-2 text-green-600 font-normal">
+            <span className="ml-2 text-accent-600 font-sans font-normal text-body normal-case tracking-normal">
               &mdash; Click a player to assign to {editorPositions[selectedPitchPosition]?.position ?? 'position'}
             </span>
           )}
@@ -514,7 +542,7 @@ const TacticsPage: React.FC = () => {
           ))}
         </div>
         {squad.length === 0 && (
-          <p className="text-center text-gray-400 text-sm py-6">
+          <p className="text-center text-navy-400 text-body-sm py-6">
             No squad players loaded.
           </p>
         )}

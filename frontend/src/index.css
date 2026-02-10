@@ -1,3 +1,98 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  html {
+    @apply scroll-smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-surface-secondary text-gray-900 font-sans text-body;
+  }
+
+  ::selection {
+    @apply bg-brand-200/60 text-brand-900;
+  }
+
+  *:focus-visible {
+    @apply outline-none ring-2 ring-brand-500/40 ring-offset-2;
+  }
+
+  *:focus:not(:focus-visible) {
+    @apply outline-none ring-0;
+  }
+
+  ::-webkit-scrollbar {
+    @apply w-1.5;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-gray-300 rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-400;
+  }
+
+  .dark-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-gray-600;
+  }
+  .dark-scrollbar::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-500;
+  }
+}
+
+@layer components {
+  .input-base {
+    @apply w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-body text-gray-900
+           placeholder:text-gray-400
+           transition-all duration-150
+           hover:border-gray-300
+           focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:outline-none;
+  }
+
+  .th-cell {
+    @apply px-3 py-2.5 text-left text-overline uppercase text-gray-500 tracking-wider;
+  }
+
+  .td-cell {
+    @apply px-3 py-3 text-body text-gray-600;
+  }
+
+  /* Section titles — Barlow Condensed uppercase */
+  .section-title {
+    @apply font-display text-lg font-bold uppercase tracking-wide text-navy-800;
+  }
+
+  /* Accent left-border decorators */
+  .accent-bar {
+    @apply relative pl-3 before:absolute before:left-0 before:top-0 before:h-full before:w-1 before:rounded-full before:bg-accent-400;
+  }
+}
+
+@layer utilities {
+  .bg-dot-pattern {
+    background-image: radial-gradient(circle, #d1d5db 0.5px, transparent 0.5px);
+    background-size: 24px 24px;
+  }
+
+  .bg-grid-pattern {
+    background-image:
+      linear-gradient(to right, rgb(0 0 0 / 0.03) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(0 0 0 / 0.03) 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
+
+  .text-gradient-brand {
+    @apply bg-gradient-to-r from-brand-600 to-brand-400 bg-clip-text text-transparent;
+  }
+
+  .text-gradient-accent {
+    @apply bg-gradient-to-r from-accent-600 to-accent-400 bg-clip-text text-transparent;
+  }
+}
