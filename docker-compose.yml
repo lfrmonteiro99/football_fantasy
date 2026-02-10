@@ -1,5 +1,5 @@
 services:
-  # Laravel API
+  # Laravel API (includes built-in simulation engine)
   api:
     build:
       context: ./api
@@ -7,118 +7,46 @@ services:
     ports:
       - "8000:8000"
     environment:
+      - APP_NAME=Football Fantasy Manager
+      - APP_ENV=local
+      - APP_DEBUG=true
+      - APP_URL=http://localhost:8000
       - DB_CONNECTION=sqlite
       - DB_DATABASE=/app/database/database.sqlite
-      - MATCH_SIMULATOR_URLS=http://simulator1:8001,http://simulator2:8001,http://simulator3:8001
-      - MATCH_SIMULATOR_MAX_CONCURRENT=9
-      - RABBITMQ_HOST=rabbitmq
-      - RABBITMQ_PORT=5672
-      - RABBITMQ_USER=football
-      - RABBITMQ_PASSWORD=fantasy
-      - RABBITMQ_VHOST=/
-      - QUEUE_CONNECTION=rabbitmq
+      - QUEUE_CONNECTION=sync
+      - CACHE_DRIVER=file
+      - SESSION_DRIVER=file
     volumes:
-      - ./api:/app
-    depends_on:
-      - redis
-      - rabbitmq
-      - simulator
-
-  # Redis for caching and queues
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    command: redis-server --appendonly yes
-    volumes:
-      - redis_data:/data
-
-  # RabbitMQ for async match simulation
-  rabbitmq:
-    image: rabbitmq:3.12-management
-    container_name: football_rabbitmq
-    ports:
-      - "5672:5672"   # AMQP port
-      - "15672:15672" # Management UI
-    environment:
-      - RABBITMQ_DEFAULT_USER=football
-      - RABBITMQ_DEFAULT_PASS=fantasy
-      - RABBITMQ_DEFAULT_VHOST=/
-    volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
+      - api_data:/app/database
+      - api_storage:/app/storage
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "ping"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/test"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  # Load balancer/reverse proxy
-  nginx:
-    image: nginx:alpine
-    ports:
-      - "80:80"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf
-    depends_on:
-      - api
-
-  simulator:
-    build:
-      context: ./unified-simulator
-      dockerfile: Dockerfile
-    ports:
-      - "8001:8001"
-    environment:
-      - ENABLE_WS=1
-      - PORT=8001
-      - INSTANCE_ID=unified1
-      - RABBITMQ_HOST=rabbitmq
-      - RABBITMQ_PORT=5672
-      - RABBITMQ_USER=football
-      - RABBITMQ_PASSWORD=fantasy
-      - RABBITMQ_VHOST=/
-      - RABBITMQ_QUEUE=microservice_jobs
-    volumes:
-      - ./unified-simulator:/app
-    depends_on:
-      - redis
-      - rabbitmq
-
-  # Queue Worker for background simulation processing
-  queue-worker:
-    build:
-      context: ./api
-      dockerfile: Dockerfile.queue-worker
-    environment:
-      - DB_CONNECTION=sqlite
-      - DB_DATABASE=/app/database/database.sqlite
-      - RABBITMQ_HOST=rabbitmq
-      - RABBITMQ_PORT=5672
-      - RABBITMQ_USER=football
-      - RABBITMQ_PASSWORD=fantasy
-      - RABBITMQ_VHOST=/
-      - QUEUE_CONNECTION=rabbitmq
-    volumes:
-      - ./api:/app
-    depends_on:
-      - rabbitmq
-      - api
-
-  # React Frontend
+  # React Frontend (served via nginx)
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
     ports:
       - "3000:3000"
-    environment:
-      - REACT_APP_API_URL=http://localhost:8000
-      - REACT_APP_SIMULATOR_URL=http://simulator:8001
+    depends_on:
+      api:
+        condition: service_healthy
+
+  # Nginx reverse proxy (optional, serves everything on port 80)
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
     volumes:
-      - ./frontend:/app
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
       - api
+      - frontend
 
 volumes:
-  redis_data:
-  rabbitmq_data:
+  api_data:
+  api_storage:

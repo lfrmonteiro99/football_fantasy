@@ -11,8 +11,8 @@ RUN apt-get update && apt-get install -y \
     unzip \
     sqlite3 \
     libsqlite3-dev \
-    supervisor \
-    && docker-php-ext-install pdo_sqlite mbstring exif pcntl bcmath gd sockets
+    && docker-php-ext-install pdo_sqlite mbstring exif pcntl bcmath gd \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
@@ -29,19 +29,20 @@ RUN composer install --no-dev --optimize-autoloader --no-scripts
 # Copy application code
 COPY . .
 
+# Run post-install scripts (generate autoload, etc.)
+RUN composer dump-autoload --optimize
+
 # Set permissions
 RUN chown -R www-data:www-data /app \
     && chmod -R 755 /app/storage \
     && chmod -R 755 /app/bootstrap/cache
 
-# Create SQLite database directory
+# Create SQLite database
 RUN mkdir -p /app/database && touch /app/database/database.sqlite
 
-# Install supervisor config for API (web server + queue worker)
-COPY docker/supervisord-api.conf /etc/supervisor/conf.d/supervisord.conf
+# Generate app key if not set, run migrations and seed
+RUN php artisan key:generate --force || true
 
-# Expose port
 EXPOSE 8000
 
-# Start supervisor to run both web server and queue worker
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]
