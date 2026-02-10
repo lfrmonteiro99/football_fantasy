@@ -1,0 +1,23 @@
+# Development overrides — volume mounts + hot reload
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  api:
+    volumes:
+      - ./api:/app
+      - /app/vendor          # Keep vendor inside container (don't overwrite with host)
+      - api_data:/app/database
+      - api_storage:/app/storage
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - /app/node_modules    # Keep node_modules inside container
+    environment:
+      - WATCHPACK_POLLING=true
+      - CHOKIDAR_USEPOLLING=true
+      - WDS_SOCKET_PORT=3000
