@@ -13,9 +13,21 @@ Football Fantasy Manager is a full-stack application with a Laravel API backend 
 
 ## Running the Project
 
-Both backend and frontend need to be running simultaneously. The frontend proxies API requests to `localhost:8000`.
+### Quick Start (root scripts)
+```bash
+./setup.sh                          # First-time setup: installs deps, creates .env, migrates & seeds DB
+./start.sh                          # Start all services in background (API + Frontend), logs in ./logs/
+./stop.sh                           # Stop all running services
+./restart.sh                        # Stop + start
+./dev.sh                            # Start in dev mode (opens separate terminals with live reload)
+./status.sh                         # Check which services are running
+```
 
-### 1. Backend (Laravel API) — port 8000
+After starting, open `http://localhost:3000`. The frontend proxies API requests to `localhost:8000`.
+
+### Manual Start (two terminals)
+
+**Terminal 1 — Backend (port 8000):**
 ```bash
 cd api
 composer install                    # Install dependencies
@@ -24,14 +36,17 @@ php artisan db:seed                 # Seed database with Portuguese teams/format
 php artisan serve                   # Start dev server (port 8000)
 ```
 
-### 2. Frontend (React) — port 3000
+**Terminal 2 — Frontend (port 3000):**
 ```bash
 cd frontend
 npm install                         # Install dependencies
 npm start                           # Start dev server (port 3000)
 ```
 
-Then open `http://localhost:3000` in a browser.
+### Docker
+```bash
+docker-compose up                   # Start all services (API, Frontend, Redis, RabbitMQ, Nginx)
+```
 
 ### Other Commands
 ```bash
