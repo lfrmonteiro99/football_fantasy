@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Football Fantasy Manager - Docker Mode
-# Starts all services using Docker Compose
+# Just run ./docker.sh and start playing
 
 set -e
 
@@ -14,8 +14,8 @@ if ! command -v docker &> /dev/null; then
     exit 1
 fi
 
-if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
-    echo "ERROR: Docker Compose is not installed. Please install Docker Compose and try again."
+if ! docker compose version &> /dev/null 2>&1 && ! command -v docker-compose &> /dev/null; then
+    echo "ERROR: Docker Compose is not installed."
     exit 1
 fi
 
@@ -27,30 +27,42 @@ case "$ACTION" in
     up|start)
         echo ""
         echo "Building and starting services..."
+        echo "(first run takes a few minutes to build images)"
         echo ""
         docker compose up --build -d
 
         echo ""
-        echo "Waiting for services to be ready..."
-        sleep 5
+        echo "Waiting for API to be ready (migrations + seed running)..."
+
+        # Wait for API health check
+        MAX_ATTEMPTS=60
+        ATTEMPT=1
+        while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+            if curl -s http://localhost:8000/api/v1/test > /dev/null 2>&1; then
+                break
+            fi
+            sleep 2
+            ATTEMPT=$((ATTEMPT + 1))
+        done
+
+        if [ $ATTEMPT -gt $MAX_ATTEMPTS ]; then
+            echo "WARNING: API may still be starting. Check logs with: ./docker.sh logs api"
+        fi
 
         echo ""
-        echo "Services running!"
-        echo "=========================="
+        echo "Ready! Open http://localhost:3000"
+        echo "================================="
         echo ""
         echo "Frontend:      http://localhost:3000"
         echo "API:           http://localhost:8000"
         echo "Nginx proxy:   http://localhost:80"
         echo ""
-        echo "To view logs:  ./docker.sh logs"
-        echo "To stop:       ./docker.sh stop"
-        echo ""
-
-        # Run migrations and seed inside the container
-        echo "Running database migrations and seed..."
-        docker compose exec api php artisan migrate --force 2>/dev/null || true
-        docker compose exec api php artisan db:seed --force 2>/dev/null || true
-        echo "OK: Database ready"
+        echo "Commands:"
+        echo "  ./docker.sh logs       Follow logs"
+        echo "  ./docker.sh logs api   Follow API logs only"
+        echo "  ./docker.sh stop       Stop everything"
+        echo "  ./docker.sh restart    Restart everything"
+        echo "  ./docker.sh status     Show container status"
         ;;
 
     down|stop)
@@ -75,22 +87,29 @@ case "$ACTION" in
         ;;
 
     rebuild)
-        echo "Rebuilding all images from scratch..."
-        docker compose down
+        echo "Full rebuild from scratch (no cache)..."
+        docker compose down -v
         docker compose build --no-cache
         docker compose up -d
         echo "All services rebuilt and started."
+        ;;
+
+    reset)
+        echo "Resetting database (fresh migrations + seed)..."
+        docker compose exec api php artisan migrate:fresh --force --seed
+        echo "Database reset complete."
         ;;
 
     *)
         echo "Usage: ./docker.sh [command]"
         echo ""
         echo "Commands:"
-        echo "  up|start     Build and start all services (default)"
-        echo "  down|stop    Stop all services"
+        echo "  up|start     Build and start everything (default)"
+        echo "  stop         Stop all services"
         echo "  restart      Stop, rebuild, and start"
         echo "  rebuild      Full rebuild from scratch (no cache)"
+        echo "  reset        Reset database (fresh migrate + seed)"
         echo "  logs         Follow logs (optionally: ./docker.sh logs api)"
-        echo "  status|ps    Show running containers"
+        echo "  status       Show running containers"
         ;;
 esac
