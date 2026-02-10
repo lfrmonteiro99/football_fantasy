@@ -65,9 +65,45 @@ case "$ACTION" in
         echo "  ./docker.sh status     Show container status"
         ;;
 
+    dev)
+        echo ""
+        echo "Starting in DEV mode (hot reload enabled)..."
+        echo "Source code changes will be picked up automatically."
+        echo ""
+        docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build -d
+
+        echo ""
+        echo "Waiting for API to be ready (migrations + seed running)..."
+
+        MAX_ATTEMPTS=60
+        ATTEMPT=1
+        while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+            if curl -s http://localhost:8000/api/v1/test > /dev/null 2>&1; then
+                break
+            fi
+            sleep 2
+            ATTEMPT=$((ATTEMPT + 1))
+        done
+
+        if [ $ATTEMPT -gt $MAX_ATTEMPTS ]; then
+            echo "WARNING: API may still be starting. Check logs with: ./docker.sh logs api"
+        fi
+
+        echo ""
+        echo "DEV mode ready! Open http://localhost:3000"
+        echo "============================================"
+        echo ""
+        echo "Frontend (hot reload):  http://localhost:3000"
+        echo "API (live reload):      http://localhost:8000"
+        echo ""
+        echo "Edit files locally and changes appear instantly."
+        echo "Use './docker.sh logs' to follow logs."
+        ;;
+
     down|stop)
         echo "Stopping all services..."
-        docker compose down
+        docker compose -f docker-compose.yml -f docker-compose.dev.yml down 2>/dev/null
+        docker compose down 2>/dev/null
         echo "All services stopped."
         ;;
 
@@ -105,6 +141,7 @@ case "$ACTION" in
         echo ""
         echo "Commands:"
         echo "  up|start     Build and start everything (default)"
+        echo "  dev          Start in dev mode (hot reload, volume mounts)"
         echo "  stop         Stop all services"
         echo "  restart      Stop, rebuild, and start"
         echo "  rebuild      Full rebuild from scratch (no cache)"
