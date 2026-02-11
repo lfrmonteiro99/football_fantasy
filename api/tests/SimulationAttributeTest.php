@@ -1352,6 +1352,179 @@ if (count($spTakerAttrs['penalty_taking']) > 0) {
 }
 
 // =========================================================================
+//  TEST 15: SET-PIECE ANIMATION REALISM
+// =========================================================================
+
+echo "\n==========================================================\n";
+echo "  TEST 15: SET-PIECE ANIMATION REALISM\n";
+echo "==========================================================\n";
+
+// Run 5 simulations and aggregate set-piece data for statistical significance
+$spAnimRuns = 5;
+$cornerTotal = 0;
+$cornersWithCross = 0;
+$cornersWithOutcome = 0;     // header, clearance, or GK claim follows
+$cornerOutcomeTypes = ['header' => 0, 'clearance' => 0, 'save' => 0];
+$fkTotal = 0;
+$fkWithSequence = 0;
+$fkLongBall = 0;
+$fkShortPass = 0;
+$fkCross = 0;
+$fkShotTotal = 0;
+$fkShotWithRunUp = 0;
+$penTotal = 0;
+$penWithRunUp = 0;
+$penSavedWithDive = 0;
+$penSavedTotal = 0;
+$headerEvents = 0;
+$cornerClearanceEvents = 0;
+
+for ($spAnim = 0; $spAnim < $spAnimRuns; $spAnim++) {
+    $spAnimTicks = runSimulation($match);
+    $spAnimEvents = collectAllEvents($spAnimTicks);
+
+    $prevEventType = null;
+    $prevEventWasCorner = false;
+    $prevEventWasFKShot = false;
+
+    foreach ($spAnimEvents as $event) {
+        $type = $event['type'] ?? '';
+        $outcome = $event['outcome'] ?? '';
+        $seq = $event['sequence'] ?? [];
+
+        // ---- CORNER ANALYSIS ----
+        if ($type === 'corner') {
+            $cornerTotal++;
+            $hasCross = false;
+            foreach ($seq as $step) {
+                if (($step['action'] ?? '') === 'cross') {
+                    $hasCross = true;
+                }
+            }
+            if ($hasCross) $cornersWithCross++;
+            $prevEventWasCorner = true;
+        } else {
+            // Check what follows a corner
+            if ($prevEventWasCorner) {
+                if ($type === 'header') {
+                    $cornersWithOutcome++;
+                    $cornerOutcomeTypes['header']++;
+                    $headerEvents++;
+                } elseif ($type === 'clearance') {
+                    $cornersWithOutcome++;
+                    $cornerOutcomeTypes['clearance']++;
+                    $cornerClearanceEvents++;
+                } elseif ($type === 'save' && $outcome === 'claimed') {
+                    $cornersWithOutcome++;
+                    $cornerOutcomeTypes['save']++;
+                }
+            }
+            $prevEventWasCorner = false;
+        }
+
+        // ---- FREE KICK PASS ANALYSIS ----
+        if ($type === 'free_kick') {
+            $fkTotal++;
+            if (count($seq) > 0) $fkWithSequence++;
+
+            foreach ($seq as $step) {
+                $action = $step['action'] ?? '';
+                if ($action === 'pass') {
+                    $start = $step['ball_start'] ?? ['x' => 50];
+                    $end = $step['ball_end'] ?? ['x' => 50];
+                    $dist = abs($end['x'] - $start['x']) + abs(($end['y'] ?? 50) - ($start['y'] ?? 50));
+                    if ($dist > 25) $fkLongBall++;
+                    else $fkShortPass++;
+                }
+                if ($action === 'cross') $fkCross++;
+            }
+
+            // Check if this FK leads to a shot (next event)
+            $prevEventWasFKShot = false;
+            // Will be checked on next iteration
+        }
+
+        // ---- FREE KICK SHOT ANALYSIS ----
+        // A shot event right after a free_kick (from resolveFreeKickShot)
+        if ($prevEventType === 'free_kick' && in_array($type, ['goal', 'save', 'shot_off_target', 'shot_blocked'])) {
+            $fkShotTotal++;
+            // Check if the preceding FK had a run-up
+            // We already counted fkWithSequence above
+        }
+
+        // ---- PENALTY ANALYSIS ----
+        if ($type === 'penalty') {
+            $penTotal++;
+            $hasRunUp = false;
+            $hasDive = false;
+            foreach ($seq as $step) {
+                if (($step['action'] ?? '') === 'run') $hasRunUp = true;
+                if (($step['action'] ?? '') === 'save') {
+                    $penSavedTotal++;
+                    // Check if GK has lateral movement (dive)
+                    $saveStart = $step['ball_start'] ?? ['y' => 50];
+                    $saveEnd = $step['ball_end'] ?? ['y' => 50];
+                    $lateralMove = abs(($saveEnd['y'] ?? 50) - ($saveStart['y'] ?? 50));
+                    $outwardMove = abs(($saveEnd['x'] ?? 50) - ($saveStart['x'] ?? 50));
+                    if ($lateralMove > 1 || $outwardMove > 1) $penSavedWithDive++;
+                }
+            }
+            if ($hasRunUp) $penWithRunUp++;
+        }
+
+        $prevEventType = $type;
+    }
+}
+
+echo "  (Aggregated over {$spAnimRuns} simulation runs)\n\n";
+
+// Corner checks
+echo "  --- CORNERS ---\n";
+echo "  Total corners: {$cornerTotal}\n";
+$crossPct = $cornerTotal > 0 ? round($cornersWithCross / $cornerTotal * 100) : 0;
+echo "  Corners with cross delivery: {$cornersWithCross}/{$cornerTotal} ({$crossPct}%)\n";
+check($cornerTotal >= 10, "Sufficient corners for testing: {$cornerTotal} (>=10)");
+check($cornersWithCross > 0 && $crossPct >= 80, "Most corners have cross delivery: {$crossPct}% (>=80%)");
+
+$outcomePct = $cornerTotal > 0 ? round($cornersWithOutcome / $cornerTotal * 100) : 0;
+echo "  Corners with outcome (header/clearance/claimed): {$cornersWithOutcome}/{$cornerTotal} ({$outcomePct}%)\n";
+echo "    Headers: {$cornerOutcomeTypes['header']}, Clearances: {$cornerOutcomeTypes['clearance']}, GK claims: {$cornerOutcomeTypes['save']}\n";
+check($cornersWithOutcome > 0 && $outcomePct >= 60, "Most corners produce an outcome: {$outcomePct}% (>=60%)");
+check($cornerOutcomeTypes['clearance'] > 0, "Some corners result in defensive clearance: {$cornerOutcomeTypes['clearance']} (>0)");
+
+// Free kick checks
+echo "\n  --- FREE KICKS ---\n";
+echo "  Total free kicks: {$fkTotal}\n";
+$fkSeqPct = $fkTotal > 0 ? round($fkWithSequence / $fkTotal * 100) : 0;
+echo "  Free kicks with animation: {$fkWithSequence}/{$fkTotal} ({$fkSeqPct}%)\n";
+check($fkWithSequence > 0 && $fkSeqPct >= 95, "All free kicks have animation: {$fkSeqPct}% (>=95%)");
+
+$fkPassTotal = $fkShortPass + $fkLongBall + $fkCross;
+echo "  FK types — short: {$fkShortPass}, long: {$fkLongBall}, cross: {$fkCross}\n";
+check($fkLongBall > 0 || $fkCross > 0, "Free kicks have variety (not all short): long={$fkLongBall} cross={$fkCross}");
+
+// Penalty checks
+echo "\n  --- PENALTIES ---\n";
+echo "  Total penalties: {$penTotal}\n";
+if ($penTotal > 0) {
+    $runUpPct = round($penWithRunUp / $penTotal * 100);
+    echo "  Penalties with run-up: {$penWithRunUp}/{$penTotal} ({$runUpPct}%)\n";
+    check($penWithRunUp === $penTotal, "All penalties have run-up: {$penWithRunUp}/{$penTotal}");
+} else {
+    echo "  (No penalties in {$spAnimRuns} runs — checking not possible)\n";
+}
+
+if ($penSavedTotal > 0) {
+    echo "  Penalty saves with GK dive: {$penSavedWithDive}/{$penSavedTotal}\n";
+    check($penSavedWithDive === $penSavedTotal, "All penalty saves show GK dive: {$penSavedWithDive}/{$penSavedTotal}");
+}
+
+// Header events should exist (from corners)
+echo "\n  --- HEADERS ---\n";
+echo "  Header events from corners: {$headerEvents}\n";
+check($headerEvents >= 3, "Multiple headers from corners over {$spAnimRuns} runs: {$headerEvents} (>=3)");
+
+// =========================================================================
 //  FINAL SUMMARY
 // =========================================================================
 

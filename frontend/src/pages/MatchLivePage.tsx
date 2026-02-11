@@ -363,33 +363,26 @@ const MatchLivePage: React.FC = () => {
     [basePlayers, currentTick?.possession, currentTick?.zone],
   );
 
-  // Ball position from tick data (preferred) or zone-based fallback
+  // Ball position: prefer tick.ball (always sent by BE), zone-based fallback only if missing
   const tickBallPosition = useMemo(() => {
     if (!currentTick) return null;
 
-    // Prefer direct ball position from tick (if backend sends it)
+    // Prefer direct ball position from tick (backend always sends this)
     if ((currentTick as any).ball) {
       return (currentTick as any).ball as { x: number; y: number };
     }
 
-    // Fallback: deterministic position based on zone + minute (no Math.random)
+    // Fallback: deterministic position based on zone + possession
     const zone = currentTick.zone;
     const possession = currentTick.possession;
     const min = currentTick.minute;
-
-    // Use minute as a pseudo-random seed for deterministic y
     const pseudoY = 35 + ((min * 7 + 13) % 30);
 
     let bx = 50;
-    if (zone?.includes('att') && possession === 'home') {
-      bx = 72;
-    } else if (zone?.includes('att') && possession === 'away') {
-      bx = 28;
-    } else if (zone?.includes('def') && possession === 'home') {
-      bx = 28;
-    } else if (zone?.includes('def') && possession === 'away') {
-      bx = 72;
-    }
+    if (zone?.includes('att') && possession === 'home') bx = 72;
+    else if (zone?.includes('att') && possession === 'away') bx = 28;
+    else if (zone?.includes('def') && possession === 'home') bx = 28;
+    else if (zone?.includes('def') && possession === 'away') bx = 72;
 
     return { x: bx, y: pseudoY };
   }, [currentTick?.zone, currentTick?.possession, currentTick?.minute, (currentTick as any)?.ball]);
@@ -410,8 +403,10 @@ const MatchLivePage: React.FC = () => {
   );
 
   const pitchPlayers = seqAnimating ? seqPlayers : possessionShiftedPlayers;
+  // Ball: prefer sequence ball during animation, otherwise tick ball (smooth transition via CSS)
   const ballPosition = seqAnimating && seqBall ? seqBall : tickBallPosition;
-  const pitchTransitionMs = seqAnimating ? seqTransition : 400;
+  // Transition: during animation use step timing, between ticks use smooth 600ms
+  const pitchTransitionMs = seqAnimating ? seqTransition : 600;
 
   // Timeline events
   const timelineEvents = useMemo(

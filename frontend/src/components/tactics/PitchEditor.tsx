@@ -8,8 +8,8 @@ import { POSITION_COLORS } from '../../utils/constants';
 
 interface PitchPosition {
   position: string;
-  x: number;
-  y: number;
+  x: number; // 0-100: depth (0 = own goal line, 100 = opponent goal)
+  y: number; // 0-100: width (0 = left touchline, 100 = right touchline)
   playerId?: number;
   playerName?: string;
 }
@@ -24,13 +24,23 @@ interface PitchEditorProps {
 }
 
 // ---------------------------------------------------------------------------
-// Pitch dimensions (SVG viewBox)
+// Vertical half-pitch dimensions (SVG viewBox)
+//
+//   Real half-pitch: 68m wide × 52.5m deep.
+//   We add ~3.5m below the goal line for the net graphic.
+//   ViewBox: 0 0 68 56
+//
+//   Orientation:  midfield at top (y ≈ 0), own goal at bottom (y = 52.5)
+//   Mapping:      formation x (width 0-100)  → SVG x (horizontal)
+//                 formation y (depth 0-100)   → SVG y (inverted)
 // ---------------------------------------------------------------------------
 
-const PITCH_W = 105;
-const PITCH_H = 68;
-const DOT_RADIUS = 2.4;
-const MARGIN = 1;
+const VP_W = 68;
+const VP_H = 56;
+const GOAL_LINE_Y = 52.5; // real half-pitch depth
+const CENTER_X = VP_W / 2; // 34
+const DOT_RADIUS = 2.6;
+const MARGIN = 2;
 
 // ---------------------------------------------------------------------------
 // Component
@@ -48,7 +58,26 @@ const PitchEditor: React.FC<PitchEditorProps> = ({
   const [selectedPosition, setSelectedPosition] = useState<number | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
-  // Convert client coordinates to SVG coordinates
+  // --- Coordinate conversion ---
+  // Formation coords (0-100) ↔ SVG coords on the vertical half-pitch
+
+  const formationToSvg = useCallback(
+    (posX: number, posY: number): { svgX: number; svgY: number } => ({
+      svgX: (posX / 100) * VP_W,                        // x = horizontal spread → SVG x
+      svgY: GOAL_LINE_Y - (posY / 100) * GOAL_LINE_Y,   // y = depth from goal → SVG y (inverted)
+    }),
+    [],
+  );
+
+  const svgToFormation = useCallback(
+    (svgX: number, svgY: number): { x: number; y: number } => ({
+      x: Math.max(MARGIN, Math.min(100 - MARGIN, (svgX / VP_W) * 100)),
+      y: Math.max(MARGIN, Math.min(100 - MARGIN, ((GOAL_LINE_Y - svgY) / GOAL_LINE_Y) * 100)),
+    }),
+    [],
+  );
+
+  // Convert client (mouse) coordinates to SVG coordinates
   const clientToSvg = useCallback(
     (clientX: number, clientY: number): { x: number; y: number } | null => {
       const svg = svgRef.current;
@@ -59,12 +88,9 @@ const PitchEditor: React.FC<PitchEditorProps> = ({
       const ctm = svg.getScreenCTM();
       if (!ctm) return null;
       const svgPt = pt.matrixTransform(ctm.inverse());
-      // Convert SVG coords (0-105, 0-68) to normalized (0-100)
-      const nx = Math.max(MARGIN, Math.min(100 - MARGIN, (svgPt.x / PITCH_W) * 100));
-      const ny = Math.max(MARGIN, Math.min(100 - MARGIN, (svgPt.y / PITCH_H) * 100));
-      return { x: nx, y: ny };
+      return svgToFormation(svgPt.x, svgPt.y);
     },
-    [],
+    [svgToFormation],
   );
 
   const handleMouseDown = useCallback(
@@ -93,7 +119,6 @@ const PitchEditor: React.FC<PitchEditorProps> = ({
 
   const handlePositionClick = useCallback(
     (index: number, e: React.MouseEvent) => {
-      // Only treat as a click if we didn't just finish dragging
       if (dragging !== null) return;
       e.stopPropagation();
       setSelectedPosition((prev) => {
@@ -112,10 +137,6 @@ const PitchEditor: React.FC<PitchEditorProps> = ({
     }
   }, [dragging, onPositionSelect]);
 
-  // Map normalized x/y (0-100) to SVG coordinates
-  const toSvgX = (v: number) => (v / 100) * PITCH_W;
-  const toSvgY = (v: number) => (v / 100) * PITCH_H;
-
   const getPositionColor = (pos: string): string => {
     return POSITION_COLORS[pos] || '#6b7280';
   };
@@ -124,7 +145,7 @@ const PitchEditor: React.FC<PitchEditorProps> = ({
     <div className={className}>
       <svg
         ref={svgRef}
-        viewBox={`0 0 ${PITCH_W} ${PITCH_H}`}
+        viewBox={`0 0 ${VP_W} ${VP_H}`}
         xmlns="http://www.w3.org/2000/svg"
         className="w-full h-auto select-none"
         style={{ maxHeight: '100%' }}
@@ -133,54 +154,100 @@ const PitchEditor: React.FC<PitchEditorProps> = ({
         onMouseLeave={handleMouseUp}
         onClick={handlePitchClick}
       >
-        {/* ---- Pitch background ---- */}
-        <rect x="0" y="0" width={PITCH_W} height={PITCH_H} fill="#2d6a2e" rx="1" />
+        {/* ---- Background ---- */}
+        <rect x="0" y="0" width={VP_W} height={VP_H} fill="#1a472a" rx="1" />
 
-        {/* Grass stripes */}
-        {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => (
+        {/* Grass stripes (horizontal on this vertical pitch) */}
+        {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
           <rect
             key={`stripe-${i}`}
-            x={i * 10.5}
-            y="0"
-            width="10.5"
-            height={PITCH_H}
-            fill={i % 2 === 0 ? '#2d6a2e' : '#327334'}
-            opacity="0.5"
+            x="0"
+            y={i * 7}
+            width={VP_W}
+            height={7}
+            fill={i % 2 === 0 ? '#1f5432' : '#236138'}
+            opacity="0.6"
           />
         ))}
 
         {/* ---- Pitch markings ---- */}
-        <g stroke="white" strokeWidth="0.3" fill="none" opacity="0.85">
-          <rect x="0" y="0" width={PITCH_W} height={PITCH_H} />
-          {/* Halfway line */}
-          <line x1="52.5" y1="0" x2="52.5" y2={PITCH_H} />
-          {/* Centre circle */}
-          <circle cx="52.5" cy="34" r="9.15" />
-          <circle cx="52.5" cy="34" r="0.4" fill="white" />
-          {/* Left penalty area */}
-          <rect x="0" y={34 - 20.15} width="16.5" height="40.3" />
-          <rect x="0" y={34 - 9.16} width="5.5" height="18.32" />
-          <circle cx="11" cy="34" r="0.4" fill="white" />
-          <path d={`M 16.5 ${34 - 8.7} A 9.15 9.15 0 0 1 16.5 ${34 + 8.7}`} />
-          {/* Right penalty area */}
-          <rect x={PITCH_W - 16.5} y={34 - 20.15} width="16.5" height="40.3" />
-          <rect x={PITCH_W - 5.5} y={34 - 9.16} width="5.5" height="18.32" />
-          <circle cx="94" cy="34" r="0.4" fill="white" />
-          <path d={`M ${PITCH_W - 16.5} ${34 - 8.7} A 9.15 9.15 0 0 0 ${PITCH_W - 16.5} ${34 + 8.7}`} />
-          {/* Corner arcs */}
-          <path d="M 0 1 A 1 1 0 0 0 1 0" />
-          <path d="M 0 67 A 1 1 0 0 1 1 68" />
-          <path d="M 105 1 A 1 1 0 0 1 104 0" />
-          <path d="M 105 67 A 1 1 0 0 0 104 68" />
-          {/* Goals */}
-          <rect x="-2" y={34 - 3.66} width="2" height="7.32" strokeWidth="0.2" opacity="0.5" />
-          <rect x={PITCH_W} y={34 - 3.66} width="2" height="7.32" strokeWidth="0.2" opacity="0.5" />
+        <g stroke="rgba(255,255,255,0.75)" strokeWidth="0.25" fill="none">
+          {/* Playing area boundary */}
+          <rect x="0" y="0" width={VP_W} height={GOAL_LINE_Y} />
+
+          {/* Midfield line (top edge of half-pitch) */}
+          <line x1="0" y1="0" x2={VP_W} y2="0" strokeWidth="0.35" />
+
+          {/* Half center circle (arc going downward from midfield) */}
+          <path d={`M ${CENTER_X - 9.15} 0 A 9.15 9.15 0 0 1 ${CENTER_X + 9.15} 0`} />
+
+          {/* Center spot on midfield line */}
+          <circle cx={CENTER_X} cy="0" r="0.35" fill="rgba(255,255,255,0.75)" />
+
+          {/* Penalty area: 16.5m deep, 40.3m wide */}
+          <rect
+            x={CENTER_X - 20.15}
+            y={GOAL_LINE_Y - 16.5}
+            width={40.3}
+            height={16.5}
+          />
+
+          {/* Goal area: 5.5m deep, 18.32m wide */}
+          <rect
+            x={CENTER_X - 9.16}
+            y={GOAL_LINE_Y - 5.5}
+            width={18.32}
+            height={5.5}
+          />
+
+          {/* Penalty spot: 11m from goal line */}
+          <circle cx={CENTER_X} cy={GOAL_LINE_Y - 11} r="0.35" fill="rgba(255,255,255,0.75)" />
+
+          {/* Penalty arc (above penalty area box) */}
+          <path
+            d={`M ${CENTER_X - 8.7} ${GOAL_LINE_Y - 16.5} A 9.15 9.15 0 0 1 ${CENTER_X + 8.7} ${GOAL_LINE_Y - 16.5}`}
+          />
+
+          {/* Corner arcs (bottom corners of the half-pitch) */}
+          <path d={`M 0 ${GOAL_LINE_Y - 1} A 1 1 0 0 0 1 ${GOAL_LINE_Y}`} />
+          <path d={`M ${VP_W} ${GOAL_LINE_Y - 1} A 1 1 0 0 1 ${VP_W - 1} ${GOAL_LINE_Y}`} />
+
+          {/* Goal (below goal line) */}
+          <rect
+            x={CENTER_X - 3.66}
+            y={GOAL_LINE_Y}
+            width={7.32}
+            height={2.2}
+            strokeWidth="0.2"
+            opacity="0.5"
+          />
+        </g>
+
+        {/* ---- Goal net texture ---- */}
+        <g opacity="0.15" stroke="white" strokeWidth="0.1">
+          {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+            <line
+              key={`net-v-${i}`}
+              x1={CENTER_X - 3.66 + i * 1.22}
+              y1={GOAL_LINE_Y}
+              x2={CENTER_X - 3.66 + i * 1.22}
+              y2={GOAL_LINE_Y + 2.2}
+            />
+          ))}
+          {[0, 1, 2].map((i) => (
+            <line
+              key={`net-h-${i}`}
+              x1={CENTER_X - 3.66}
+              y1={GOAL_LINE_Y + i * 0.73}
+              x2={CENTER_X + 3.66}
+              y2={GOAL_LINE_Y + i * 0.73}
+            />
+          ))}
         </g>
 
         {/* ---- Position dots ---- */}
         {positions.map((pos, idx) => {
-          const cx = toSvgX(pos.x);
-          const cy = toSvgY(pos.y);
+          const { svgX, svgY } = formationToSvg(pos.x, pos.y);
           const color = getPositionColor(pos.position);
           const isActive = dragging === idx;
           const isSelected = selectedPosition === idx;
@@ -193,7 +260,8 @@ const PitchEditor: React.FC<PitchEditorProps> = ({
               key={idx}
               style={{
                 cursor: isActive ? 'grabbing' : 'grab',
-                transform: `translate(${cx}px, ${cy}px)`,
+                transform: `translate(${svgX}px, ${svgY}px)`,
+                transition: isActive ? 'none' : 'transform 0.15s ease-out',
               }}
               onMouseDown={(e) => handleMouseDown(idx, e)}
               onClick={(e) => handlePositionClick(idx, e)}
@@ -203,7 +271,7 @@ const PitchEditor: React.FC<PitchEditorProps> = ({
                 <circle
                   cx={0}
                   cy={0}
-                  r={DOT_RADIUS + 1}
+                  r={DOT_RADIUS + 1.2}
                   fill="none"
                   stroke="#22c55e"
                   strokeWidth="0.5"
@@ -218,7 +286,15 @@ const PitchEditor: React.FC<PitchEditorProps> = ({
                 </circle>
               )}
 
-              {/* Dot background */}
+              {/* Shadow */}
+              <circle
+                cx={0.3}
+                cy={0.3}
+                r={DOT_RADIUS}
+                fill="rgba(0,0,0,0.3)"
+              />
+
+              {/* Player dot */}
               <circle
                 cx={0}
                 cy={0}
@@ -229,13 +305,13 @@ const PitchEditor: React.FC<PitchEditorProps> = ({
                 opacity={0.95}
               />
 
-              {/* Position label */}
+              {/* Position abbreviation */}
               <text
                 x={0}
-                y={0.6}
+                y={0.7}
                 textAnchor="middle"
                 fill="white"
-                fontSize="1.8"
+                fontSize="2"
                 fontWeight="bold"
                 fontFamily="sans-serif"
                 style={{ pointerEvents: 'none' }}
@@ -246,12 +322,13 @@ const PitchEditor: React.FC<PitchEditorProps> = ({
               {/* Player name below */}
               <text
                 x={0}
-                y={DOT_RADIUS + 2}
+                y={DOT_RADIUS + 2.2}
                 textAnchor="middle"
                 fill="white"
-                fontSize="1.5"
+                fontSize="1.7"
                 fontFamily="sans-serif"
-                opacity={0.85}
+                opacity={0.9}
+                fontWeight="600"
                 style={{ pointerEvents: 'none' }}
               >
                 {displayName}
