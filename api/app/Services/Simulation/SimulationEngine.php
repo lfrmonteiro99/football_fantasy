@@ -438,6 +438,9 @@ class SimulationEngine
      */
     private function simulateMinute(): array
     {
+        // Ensure ball is within playable bounds at the start of each minute
+        $this->clampBall();
+
         $events = [];
         $sequence = []; // accumulate a continuous sequence across the whole minute
 
@@ -861,7 +864,7 @@ class SimulationEngine
         $this->state->ball = $ballPos;
 
         $sequence = [
-            $this->buildSequenceAction('run', $fouled, ['x' => $ballPos['x'] - 5, 'y' => $ballPos['y']], $ballPos, random_int(200, 500)),
+            $this->buildSequenceAction('run', $fouled, ['x' => max(2.0, $ballPos['x'] - 5), 'y' => $ballPos['y']], $ballPos, random_int(200, 500)),
             $this->buildSequenceAction('foul', $fouler, $ballPos, $ballPos, random_int(150, 300)),
         ];
 
@@ -1225,8 +1228,8 @@ class SimulationEngine
             return [];
         }
 
-        // Throw-in happens on the sideline (y = 0 or 100)
-        $sidelineY = random_int(0, 1) === 0 ? 0.0 : 100.0;
+        // Throw-in happens on the sideline (y near 0 or 100)
+        $sidelineY = random_int(0, 1) === 0 ? 2.0 : 98.0;
         $this->state->ball = ['x' => (float) random_int(15, 85), 'y' => $sidelineY];
 
         return [$this->buildEvent('throw_in', $side, $player, null, 'success', [])];
@@ -1314,7 +1317,9 @@ class SimulationEngine
                 $tackleChance = max(30, min(85, $tackleChance));
 
                 if (random_int(1, 100) <= (int) $tackleChance) {
-                    // Successful tackle
+                    // Successful tackle — jitter so consecutive tackles don't share exact coords
+                    $this->clampBall();
+                    $this->jitterBall();
                     $ballPos = $this->state->ball;
                     $sequence = [
                         $this->buildSequenceAction('tackle', $tackler, $ballPos, $ballPos, random_int(200, 400)),
@@ -1326,6 +1331,8 @@ class SimulationEngine
                 // Failed tackle: attacker keeps possession, no event emitted
             } elseif ($tackler) {
                 // No attacker found, simple tackle
+                $this->clampBall();
+                $this->jitterBall();
                 $ballPos = $this->state->ball;
                 $sequence = [
                     $this->buildSequenceAction('tackle', $tackler, $ballPos, $ballPos, random_int(200, 400)),
@@ -1348,7 +1355,7 @@ class SimulationEngine
 
                 if (random_int(1, 100) <= (int) $interceptChance) {
                     $ballPos = $this->state->ball;
-                    $newX = max(0.0, min(100.0, $ballPos['x'] + random_int(-8, 8)));
+                    $newX = max(2.0, min(98.0, $ballPos['x'] + random_int(-8, 8)));
                     $newY = max(5.0, min(95.0, $ballPos['y'] + random_int(-8, 8)));
                     $newPos = ['x' => $newX, 'y' => $newY];
                     $sequence = [
@@ -1440,8 +1447,9 @@ class SimulationEngine
         $this->state->stats[$side]['offsides']++;
 
         $ballPos = $this->state->ball;
+        $runEndX = min(98.0, $ballPos['x'] + ($side === 'home' ? 10 : -10));
         $sequence = [
-            $this->buildSequenceAction('run', $player, $ballPos, ['x' => $ballPos['x'] + 10, 'y' => $ballPos['y']], random_int(200, 500)),
+            $this->buildSequenceAction('run', $player, $ballPos, ['x' => $runEndX, 'y' => $ballPos['y']], random_int(200, 500)),
         ];
 
         return [$this->buildEvent('offside', $side, $player, null, 'fail', $sequence)];
@@ -2043,6 +2051,26 @@ class SimulationEngine
     // =========================================================================
 
     /**
+     * Clamp ball position within playable pitch bounds (2-98 x, 2-98 y).
+     * Prevents events from occurring exactly on or beyond the boundary lines.
+     */
+    private function clampBall(): void
+    {
+        $this->state->ball['x'] = max(2.0, min(98.0, (float) $this->state->ball['x']));
+        $this->state->ball['y'] = max(2.0, min(98.0, (float) $this->state->ball['y']));
+    }
+
+    /**
+     * Add small random jitter to the current ball position to avoid
+     * identical coordinates on consecutive events.
+     */
+    private function jitterBall(): void
+    {
+        $this->state->ball['x'] = max(2.0, min(98.0, $this->state->ball['x'] + (mt_rand(-200, 200) / 100.0)));
+        $this->state->ball['y'] = max(2.0, min(98.0, $this->state->ball['y'] + (mt_rand(-200, 200) / 100.0)));
+    }
+
+    /**
      * Move ball forward toward the attacking goal.
      * Home attacks toward x=100, away attacks toward x=0.
      */
@@ -2052,7 +2080,7 @@ class SimulationEngine
         if ($side === 'away') {
             $dx = -$dx;
         }
-        $this->state->ball['x'] = max(0.0, min(100.0, $this->state->ball['x'] + $dx));
+        $this->state->ball['x'] = max(2.0, min(98.0, $this->state->ball['x'] + $dx));
         $this->state->ball['y'] = max(5.0, min(95.0, $this->state->ball['y'] + random_int(-10, 10)));
     }
 
@@ -2065,7 +2093,7 @@ class SimulationEngine
         if ($side === 'away') {
             $dx = -$dx;
         }
-        $this->state->ball['x'] = max(0.0, min(100.0, $this->state->ball['x'] + $dx));
+        $this->state->ball['x'] = max(2.0, min(98.0, $this->state->ball['x'] + $dx));
         $this->state->ball['y'] = max(5.0, min(95.0, $this->state->ball['y'] + random_int(-5, 5)));
     }
 
@@ -2080,8 +2108,8 @@ class SimulationEngine
         $current = $this->state->ball['x'];
         // Move 60-80% of the way toward the attacking third
         $progress = 0.6 + (mt_rand() / mt_getrandmax()) * 0.2;
-        $this->state->ball['x'] = $current + ($target - $current) * $progress;
-        $this->state->ball['y'] = max(10.0, min(90.0, $this->state->ball['y'] + random_int(-15, 15)));
+        $this->state->ball['x'] = max(2.0, min(98.0, $current + ($target - $current) * $progress));
+        $this->state->ball['y'] = max(5.0, min(95.0, $this->state->ball['y'] + random_int(-15, 15)));
     }
 
     /**
@@ -2090,9 +2118,11 @@ class SimulationEngine
     private function goalPosition(string $side): array
     {
         // Home attacks toward x=100, away toward x=0
+        // Y varies within goal width (roughly 35-65 maps to inside the posts)
+        $goalY = 50.0 + random_int(-12, 12);
         return $side === 'home'
-            ? ['x' => 99.0, 'y' => 50.0]
-            : ['x' => 1.0, 'y' => 50.0];
+            ? ['x' => 99.0, 'y' => $goalY]
+            : ['x' => 1.0, 'y' => $goalY];
     }
 
     /**
@@ -2121,8 +2151,8 @@ class SimulationEngine
      */
     private function cornerPosition(string $side): array
     {
-        $goalSide = $side === 'home' ? 100.0 : 0.0;
-        $cornerY = random_int(0, 1) === 0 ? 0.0 : 100.0;
+        $goalSide = $side === 'home' ? 99.0 : 1.0;
+        $cornerY = random_int(0, 1) === 0 ? 1.0 : 99.0;
         return ['x' => $goalSide, 'y' => $cornerY];
     }
 
