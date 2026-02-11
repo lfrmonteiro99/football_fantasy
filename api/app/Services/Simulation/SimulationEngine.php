@@ -444,10 +444,12 @@ class SimulationEngine
         // Each minute = a passage of play with 3-8 actions
         $actionCount = random_int(3, 8);
 
-        // Background passing: every minute has 4-8 passes regardless of what happens
+        // Background passing: every minute has 6-12 passes regardless of what happens
         // (represents the continuous ball circulation not shown as events)
-        $backgroundPasses = random_int(4, 8);
+        $backgroundPasses = random_int(6, 12);
         $this->state->stats[$this->state->possession]['passes'] += $backgroundPasses;
+        // Non-possessing team also circulates 1-3 passes during brief spells
+        $this->state->stats[$this->state->opponent($this->state->possession)]['passes'] += random_int(1, 3);
 
         $lastActionWasPass = false;
 
@@ -480,16 +482,16 @@ class SimulationEngine
             // Modify foul rate based on opponent's tackle_harder
             $oppSide = $this->state->opponent($side);
             $oppTactic = $oppSide === 'home' ? $this->state->homeTactic : $this->state->awayTactic;
-            $foulBase = 10;
+            $foulBase = 8;
             if ($oppTactic && ($oppTactic->tackle_harder || $oppTactic->get_stuck_in)) {
-                $foulBase = 15;
+                $foulBase = 14;
             }
             if ($oppTactic && (($oppTactic->tackling ?? 'balanced') === 'stay_on_feet')) {
-                $foulBase = 7;
+                $foulBase = 5;
             }
 
             // Modify defensive action threshold based on opponent's pressing
-            $defActionBase = 15;
+            $defActionBase = 20;
             if ($oppTactic) {
                 $oppPressing = $oppTactic->pressing ?? 'sometimes';
                 if (in_array($oppPressing, ['often', 'always'], true)) {
@@ -499,26 +501,40 @@ class SimulationEngine
                 }
             }
 
+            // Probability ranges: shot (in attacking third only), foul, defensive action, offside
+            // Each range is independent, not cumulative from shot threshold
+            $cursor = 0;
+
             if ($inAttackingThird && $roll <= $shotThreshold) {
-                // Shot attempt
+                // Shot attempt (only in attacking third)
                 $shotEvents = $this->resolveShot($side, null, $sequence);
                 $events = array_merge($events, $shotEvents);
-                $sequence = []; // reset after shot
-                break; // shot ends the passage
-            } elseif ($roll <= $shotThreshold + $foulBase) {
+                $sequence = [];
+                break;
+            }
+            // Outside attacking third, shot range becomes available for passes (default)
+            $cursor = $inAttackingThird ? $shotThreshold : 0;
+
+            if ($roll > $cursor && $roll <= $cursor + $foulBase) {
                 // Foul interrupts play
                 $foulEvents = $this->simulateFoul();
                 $events = array_merge($events, $foulEvents);
                 $sequence = [];
                 break;
-            } elseif ($roll <= $shotThreshold + $foulBase + $defActionBase) {
+            }
+            $cursor += $foulBase;
+
+            if ($roll > $cursor && $roll <= $cursor + $defActionBase) {
                 // Turnover (tackle or interception)
                 $defEvents = $this->simulateDefensiveAction();
                 $events = array_merge($events, $defEvents);
                 $sequence = [];
                 break;
-            } elseif ($roll <= $shotThreshold + $foulBase + $defActionBase + 2 && $inAttackingThird && $lastActionWasPass) {
-                // 2% offside, only after a pass and in attacking third
+            }
+            $cursor += $defActionBase;
+
+            if ($roll > $cursor && $roll <= $cursor + 6 && $inAttackingThird) {
+                // 6% offside in attacking third (regardless of last action)
                 $offEvents = $this->simulateOffside();
                 $events = array_merge($events, $offEvents);
                 $sequence = [];
@@ -678,9 +694,17 @@ class SimulationEngine
 
         $this->state->stats[$side]['shots']++;
 
+        // Structural penalty: fewer defenders = easier to score
+        $defenderCount = count(array_filter(
+            $this->state->getAvailablePlayers($defSide),
+            fn(Player $p) => in_array($this->state->playerStates[$p->id]['position'] ?? '', ['CB', 'SW', 'LB', 'RB', 'WB'], true)
+        ));
+        $structuralPenalty = max(0, (3 - $defenderCount) * 8); // 0 if >=3 defenders, 8 per missing defender
+
         // Decision: blocked before shot (25%)
         $blockChance = 25 + ($defPositioning + $defMarking - 20) * 0.4 + ($defConcentration - 10) * 0.3 + ($defStrength - 10) * 0.2;
-        $blockChance = max(10, min(45, $blockChance));
+        $blockChance -= $structuralPenalty;
+        $blockChance = max(5, min(45, $blockChance));
 
         if (random_int(1, 100) <= (int) $blockChance) {
             // Blocked by defender
@@ -690,7 +714,7 @@ class SimulationEngine
                 $this->buildSequenceAction('clearance', $defender ?? $shooter, $this->goalPosition($side), $ballStart, random_int(200, 400)),
             ]);
 
-            $events[] = $this->buildEvent('shot_on_target', $side, $shooter, $defender, 'blocked', $sequence);
+            $events[] = $this->buildEvent('shot_blocked', $side, $shooter, $defender, 'blocked', $sequence);
 
             // Blocked shot: 50% corner, 50% loose ball
             if (random_int(1, 100) <= 50) {
@@ -787,7 +811,7 @@ class SimulationEngine
             $this->buildSequenceAction('clearance', $defender ?? $shooter, $goalPos, $ballStart, random_int(200, 400)),
         ]);
 
-        $events[] = $this->buildEvent('shot_on_target', $side, $shooter, $defender, 'blocked', $sequence);
+        $events[] = $this->buildEvent('shot_blocked', $side, $shooter, $defender, 'blocked', $sequence);
 
         if (random_int(1, 100) <= 50) {
             $events = array_merge($events, $this->awardCorner($side));
@@ -880,13 +904,13 @@ class SimulationEngine
         $aggression = $this->state->getEffectiveAttribute($fouler->id, 'aggression');
         $bravery = $this->state->getEffectiveAttribute($fouler->id, 'bravery');
 
-        // Yellow card: ~15% base, modified by aggression
-        $yellowChance = 15 + ($aggression - 10) * 1.0;
+        // Yellow card: ~13% base per foul, modified by aggression
+        $yellowChance = 13 + ($aggression - 10) * 0.5;
 
         // Tactic: tackle_harder increases card chance
         $tactic = $side === 'home' ? $this->state->homeTactic : $this->state->awayTactic;
         if ($tactic && ($tactic->tackle_harder || $tactic->get_stuck_in)) {
-            $yellowChance += 5;
+            $yellowChance += 4;
         }
         // Stay on feet reduces card chance
         if ($tactic && (($tactic->tackling ?? 'balanced') === 'stay_on_feet')) {
@@ -897,10 +921,10 @@ class SimulationEngine
             $yellowChance -= 2;
         }
 
-        $yellowChance = max(5, min(40, $yellowChance));
+        $yellowChance = max(3, min(30, $yellowChance));
 
-        // Red card: ~1% base
-        $redChance = 1 + max(0, ($aggression - 15)) * 0.5;
+        // Red card: ~0.15% base (very rare — ~1 per 5-7 matches)
+        $redChance = 0.15 + max(0, ($aggression - 15)) * 0.1;
 
         if (random_int(1, 100) <= (int) $redChance) {
             // Straight red
@@ -1274,7 +1298,7 @@ class SimulationEngine
 
         $roll = random_int(1, 100);
 
-        if ($roll <= 45) {
+        if ($roll <= 40) {
             // Tackle - use strength + tackling + anticipation
             $tackler = $this->pickWeightedPlayer($defSide, self::DEFENSIVE_POSITIONS, 'tackling');
             $attacker = $this->pickWeightedPlayer($attSide, self::SHOOTING_POSITIONS, 'dribbling');
@@ -1310,7 +1334,7 @@ class SimulationEngine
                 $this->state->stats[$defSide]['tackles']++;
                 $this->state->possession = $defSide;
             }
-        } elseif ($roll <= 80) {
+        } elseif ($roll <= 70) {
             // Interception - use anticipation + concentration + vision
             $interceptor = $this->pickWeightedPlayer($defSide, self::DEFENSIVE_POSITIONS, 'anticipation');
             if ($interceptor) {
@@ -1331,7 +1355,7 @@ class SimulationEngine
                         $this->buildSequenceAction('run', $interceptor, $ballPos, $newPos, random_int(200, 500)),
                     ];
                     $events[] = $this->buildEvent('interception', $defSide, $interceptor, null, 'success', $sequence);
-                    $this->state->stats[$defSide]['tackles']++;
+                    $this->state->stats[$defSide]['interceptions']++;
                     $this->state->ball = $newPos;
                     $this->state->possession = $defSide;
                 }
@@ -1354,9 +1378,15 @@ class SimulationEngine
                     $this->buildSequenceAction('clearance', $clearer, $ballStart, $ballEnd, random_int(200, 400)),
                 ];
                 $events[] = $this->buildEvent('clearance', $defSide, $clearer, null, 'success', $sequence);
-                $this->state->stats[$defSide]['tackles']++;
+                $this->state->stats[$defSide]['clearances']++;
                 $this->state->ball = $ballEnd;
                 $this->state->possession = $defSide;
+
+                // 10% chance clearance goes behind for a corner
+                if (random_int(1, 100) <= 10) {
+                    $attSide = $this->state->opponent($defSide);
+                    $events = array_merge($events, $this->awardCorner($attSide));
+                }
             }
         }
 
@@ -1387,8 +1417,8 @@ class SimulationEngine
         $anticipation = $this->state->getEffectiveAttribute($player->id, 'anticipation');
 
         // Smart players avoid offside more often
-        $avoidChance = ($offTheBall + $playerDecisions + $anticipation - 30) * 2.0;
-        $avoidChance = max(0, min(60, $avoidChance));
+        $avoidChance = ($offTheBall + $playerDecisions + $anticipation - 30) * 1.5;
+        $avoidChance = max(0, min(40, $avoidChance));
 
         if (random_int(1, 100) <= (int) $avoidChance) {
             // Player was smart enough to time the run - no offside
@@ -1581,9 +1611,12 @@ class SimulationEngine
      */
     private function resolvePossession(): void
     {
-        // Base keep rate, modified by tempo and directness
+        // Base keep rate, modified by tempo, directness, and mentality
         $keepRate = 80;
         $tactic = $this->state->possession === 'home' ? $this->state->homeTactic : $this->state->awayTactic;
+        $oppSide = $this->state->opponent($this->state->possession);
+        $oppTactic = $oppSide === 'home' ? $this->state->homeTactic : $this->state->awayTactic;
+
         if ($tactic) {
             $tempo = $tactic->tempo ?? 'standard';
             if ($tempo === 'very_slow' || $tempo === 'slow') {
@@ -1600,6 +1633,33 @@ class SimulationEngine
             if ($directness === 'direct' || $directness === 'very_direct') {
                 $keepRate -= 5;
             }
+
+            // Mentality affects possession: attacking teams keep the ball more
+            $mentality = $tactic->mentality ?? 'balanced';
+            if ($mentality === 'very_attacking') {
+                $keepRate += 6;
+            } elseif ($mentality === 'attacking') {
+                $keepRate += 3;
+            } elseif ($mentality === 'defensive') {
+                $keepRate -= 4;
+            } elseif ($mentality === 'very_defensive') {
+                $keepRate -= 8;
+            }
+        }
+
+        // Opponent's pressing also challenges possession
+        if ($oppTactic) {
+            $oppPressing = $oppTactic->pressing ?? 'sometimes';
+            if (in_array($oppPressing, ['often', 'always'], true)) {
+                $keepRate -= 5; // High pressing disrupts possession
+            } elseif (in_array($oppPressing, ['rarely', 'never'], true)) {
+                $keepRate += 3; // Low pressing allows easy retention
+            }
+        }
+
+        // Home advantage: home team retains possession slightly better
+        if ($this->state->possession === 'home') {
+            $keepRate += 3;
         }
 
         if (random_int(1, 100) <= $keepRate) {
@@ -2101,11 +2161,11 @@ class SimulationEngine
     {
         $roll = random_int(1, 100);
 
-        // 5% penalty area, 25% attacking third, 70% midfield/own half
-        if ($roll <= 5) {
+        // 1% penalty area, 25% attacking third, 74% midfield/own half
+        if ($roll <= 1) {
             return 'penalty_area';
         }
-        if ($roll <= 30) {
+        if ($roll <= 26) {
             return 'attacking_third';
         }
         return 'midfield';

@@ -74,6 +74,8 @@ class MatchState
             'saves' => 0,
             'passes' => 0,
             'tackles' => 0,
+            'interceptions' => 0,
+            'clearances' => 0,
             'offsides' => 0,
         ],
         'away' => [
@@ -87,6 +89,8 @@ class MatchState
             'saves' => 0,
             'passes' => 0,
             'tackles' => 0,
+            'interceptions' => 0,
+            'clearances' => 0,
             'offsides' => 0,
         ],
     ];
