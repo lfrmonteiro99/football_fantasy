@@ -667,6 +667,16 @@ class SimulationEngine
         $defSide = $this->state->opponent($side);
         $events = [];
 
+        // Ensure minimum shooting distance from the goal line (at least 10 units)
+        $goalLineX = $side === 'home' ? 99.0 : 1.0;
+        $distToGoal = abs($this->state->ball['x'] - $goalLineX);
+        if ($distToGoal < 10.0) {
+            // Push ball back to at least 10 units from goal
+            $this->state->ball['x'] = $side === 'home'
+                ? min(89.0, $this->state->ball['x'])
+                : max(11.0, $this->state->ball['x']);
+        }
+
         $shooter = $this->pickWeightedPlayer($side, self::SHOOTING_POSITIONS, 'finishing');
         if (!$shooter) {
             return $events;
@@ -710,24 +720,23 @@ class SimulationEngine
         $blockChance = max(5, min(45, $blockChance));
 
         if (random_int(1, 100) <= (int) $blockChance) {
-            // Blocked by defender
+            // Blocked by defender — store goal position once for continuity
             $ballStart = $this->state->ball;
+            $goalTarget = $this->goalPosition($side);
             $sequence = array_merge($priorSequence, [
-                $this->buildSequenceAction('shoot', $shooter, $ballStart, $this->goalPosition($side), random_int(200, 500)),
-                $this->buildSequenceAction('clearance', $defender ?? $shooter, $this->goalPosition($side), $ballStart, random_int(200, 400)),
+                $this->buildSequenceAction('shoot', $shooter, $ballStart, $goalTarget, random_int(200, 500)),
+                $this->buildSequenceAction('clearance', $defender ?? $shooter, $goalTarget, $ballStart, random_int(200, 400)),
             ]);
 
             $events[] = $this->buildEvent('shot_blocked', $side, $shooter, $defender, 'blocked', $sequence);
 
-            // Scatter ball after block so repeat shots don't share exact position
-            $this->jitterBall();
-
             // Blocked shot: 50% corner, 50% loose ball
             if (random_int(1, 100) <= 50) {
-                $goalLine = $this->goalPosition($side);
-                $goalLine['y'] += random_int(-10, 10);
-                $events = array_merge($events, $this->awardCorner($side, $goalLine));
+                $events = array_merge($events, $this->awardCorner($side, $goalTarget));
             }
+
+            // Scatter ball after block so repeat shots don't share exact position
+            $this->jitterBall();
 
             return $events;
         }
@@ -809,10 +818,13 @@ class SimulationEngine
                     $this->buildSequenceAction('save', $gk ?? $shooter, $goalPos, $deflectPos, random_int(150, 350)),
                 ]);
             } else {
-                // GK catches or holds the ball
+                // GK catches or holds the ball — small displacement to show collecting
+                $holdPos = $goalPos;
+                $holdPos['x'] += ($side === 'home' ? -3 : 3); // GK steps out slightly
+                $holdPos['x'] = max(2.0, min(98.0, $holdPos['x']));
                 $sequence = array_merge($priorSequence, [
                     $this->buildSequenceAction('shoot', $shooter, $ballStart, $goalPos, random_int(200, 500)),
-                    $this->buildSequenceAction('save', $gk ?? $shooter, $goalPos, $goalPos, random_int(150, 350)),
+                    $this->buildSequenceAction('save', $gk ?? $shooter, $goalPos, $holdPos, random_int(150, 350)),
                 ]);
             }
 
@@ -833,14 +845,12 @@ class SimulationEngine
 
         $events[] = $this->buildEvent('shot_blocked', $side, $shooter, $defender, 'blocked', $sequence);
 
+        if (random_int(1, 100) <= 50) {
+            $events = array_merge($events, $this->awardCorner($side, $goalPos));
+        }
+
         // Scatter ball after block so repeat shots don't share exact position
         $this->jitterBall();
-
-        if (random_int(1, 100) <= 50) {
-            $goalLine = $this->goalPosition($side);
-            $goalLine['y'] += random_int(-10, 10);
-            $events = array_merge($events, $this->awardCorner($side, $goalLine));
-        }
 
         return $events;
     }
@@ -885,8 +895,12 @@ class SimulationEngine
         $ballPos = $this->foulCoordinates($attSide, $foulZone);
         $this->state->ball = $ballPos;
 
+        // Fouled player was running toward the attacking goal before being fouled
+        $runStartX = $attSide === 'home'
+            ? max(2.0, $ballPos['x'] - 5)   // home attacks right: ran from left
+            : min(98.0, $ballPos['x'] + 5);  // away attacks left: ran from right
         $sequence = [
-            $this->buildSequenceAction('run', $fouled, ['x' => max(2.0, $ballPos['x'] - 5), 'y' => $ballPos['y']], $ballPos, random_int(200, 500)),
+            $this->buildSequenceAction('run', $fouled, ['x' => $runStartX, 'y' => $ballPos['y']], $ballPos, random_int(200, 500)),
             $this->buildSequenceAction('foul', $fouler, $ballPos, $ballPos, random_int(150, 300)),
         ];
 
@@ -1350,15 +1364,22 @@ class SimulationEngine
                 $tackleChance = max(30, min(85, $tackleChance));
 
                 if (random_int(1, 100) <= (int) $tackleChance) {
-                    // Successful tackle — jitter so consecutive tackles don't share exact coords
+                    // Successful tackle — ball moves a few units in defender's direction
                     $this->clampBall();
                     $this->jitterBall();
                     $ballPos = $this->state->ball;
+                    $tackleDisplace = random_int(3, 6);
+                    $tackleEndX = $defSide === 'home'
+                        ? min(98.0, $ballPos['x'] + $tackleDisplace)
+                        : max(2.0, $ballPos['x'] - $tackleDisplace);
+                    $tackleEndY = max(5.0, min(95.0, $ballPos['y'] + random_int(-3, 3)));
+                    $tackleEnd = ['x' => $tackleEndX, 'y' => $tackleEndY];
                     $sequence = [
-                        $this->buildSequenceAction('tackle', $tackler, $ballPos, $ballPos, random_int(200, 400)),
+                        $this->buildSequenceAction('tackle', $tackler, $ballPos, $tackleEnd, random_int(200, 400)),
                     ];
                     $events[] = $this->buildEvent('tackle', $defSide, $tackler, $attacker, 'success', $sequence);
                     $this->state->stats[$defSide]['tackles']++;
+                    $this->state->ball = $tackleEnd;
                     $this->state->possession = $defSide;
                 }
                 // Failed tackle: attacker keeps possession, no event emitted
@@ -1367,11 +1388,18 @@ class SimulationEngine
                 $this->clampBall();
                 $this->jitterBall();
                 $ballPos = $this->state->ball;
+                $tackleDisplace = random_int(3, 6);
+                $tackleEndX = $defSide === 'home'
+                    ? min(98.0, $ballPos['x'] + $tackleDisplace)
+                    : max(2.0, $ballPos['x'] - $tackleDisplace);
+                $tackleEndY = max(5.0, min(95.0, $ballPos['y'] + random_int(-3, 3)));
+                $tackleEnd = ['x' => $tackleEndX, 'y' => $tackleEndY];
                 $sequence = [
-                    $this->buildSequenceAction('tackle', $tackler, $ballPos, $ballPos, random_int(200, 400)),
+                    $this->buildSequenceAction('tackle', $tackler, $ballPos, $tackleEnd, random_int(200, 400)),
                 ];
                 $events[] = $this->buildEvent('tackle', $defSide, $tackler, null, 'success', $sequence);
                 $this->state->stats[$defSide]['tackles']++;
+                $this->state->ball = $tackleEnd;
                 $this->state->possession = $defSide;
             }
         } elseif ($roll <= 70) {
@@ -1409,11 +1437,13 @@ class SimulationEngine
                 $bravery = $this->state->getEffectiveAttribute($clearer->id, 'bravery');
 
                 $ballStart = $this->state->ball;
-                $clearDistance = 15 + ($heading - 10) * 1.0 + ($strength - 10) * 0.5;
+                $clearDistance = max(20.0, 15 + ($heading - 10) * 1.0 + ($strength - 10) * 0.5);
                 $clearX = $defSide === 'home'
-                    ? min(70.0, $ballStart['x'] + $clearDistance)
-                    : max(30.0, $ballStart['x'] - $clearDistance);
-                $ballEnd = ['x' => $clearX, 'y' => (float) random_int(15, 85)];
+                    ? min(75.0, $ballStart['x'] + $clearDistance)
+                    : max(2.0, $ballStart['x'] - $clearDistance);
+                // Constrain Y relative to start position (±20) rather than fully random
+                $clearY = max(5.0, min(95.0, $ballStart['y'] + random_int(-20, 20)));
+                $ballEnd = ['x' => max(2.0, min(98.0, $clearX)), 'y' => $clearY];
                 $sequence = [
                     $this->buildSequenceAction('clearance', $clearer, $ballStart, $ballEnd, random_int(200, 400)),
                 ];
@@ -1480,7 +1510,9 @@ class SimulationEngine
         $this->state->stats[$side]['offsides']++;
 
         $ballPos = $this->state->ball;
-        $runEndX = min(98.0, $ballPos['x'] + ($side === 'home' ? 10 : -10));
+        $runEndX = $side === 'home'
+            ? min(98.0, $ballPos['x'] + 10)
+            : max(2.0, $ballPos['x'] - 10);
         $sequence = [
             $this->buildSequenceAction('run', $player, $ballPos, ['x' => $runEndX, 'y' => $ballPos['y']], random_int(200, 500)),
         ];
@@ -2343,7 +2375,32 @@ class SimulationEngine
             $taker = $this->pickRandomAvailablePlayer($side);
         }
 
-        return $this->buildEvent('free_kick', $side, $taker, null, 'success', []);
+        // Pick a receiver for the free kick pass
+        $receiver = $this->pickWeightedPlayer($side, self::CREATIVE_POSITIONS, 'off_the_ball');
+        if (!$receiver || $receiver->id === $taker->id) {
+            $receiver = $this->pickRandomAvailablePlayer($side);
+        }
+
+        // Animate free kick: taker runs to ball, then plays a short pass forward
+        $ballPos = $this->state->ball;
+        $approachPos = ['x' => max(2.0, min(98.0, $ballPos['x'] + ($side === 'home' ? -3 : 3))), 'y' => $ballPos['y']];
+        $dx = $side === 'home' ? random_int(5, 15) : -random_int(5, 15);
+        $passEnd = ['x' => max(2.0, min(98.0, $ballPos['x'] + $dx)), 'y' => max(5.0, min(95.0, $ballPos['y'] + random_int(-8, 8)))];
+
+        $passStep = $this->buildSequenceAction('pass', $taker, $ballPos, $passEnd, random_int(300, 600));
+        if ($receiver) {
+            $passStep['target_id'] = $receiver->id;
+            $passStep['target_name'] = $receiver->first_name . ' ' . $receiver->last_name;
+        }
+
+        $sequence = [
+            $this->buildSequenceAction('run', $taker, $approachPos, $ballPos, random_int(200, 400)),
+            $passStep,
+        ];
+
+        $this->state->ball = $passEnd;
+
+        return $this->buildEvent('free_kick', $side, $taker, null, 'success', $sequence);
     }
 
     /**
