@@ -719,6 +719,9 @@ class SimulationEngine
 
             $events[] = $this->buildEvent('shot_blocked', $side, $shooter, $defender, 'blocked', $sequence);
 
+            // Scatter ball after block so repeat shots don't share exact position
+            $this->jitterBall();
+
             // Blocked shot: 50% corner, 50% loose ball
             if (random_int(1, 100) <= 50) {
                 $events = array_merge($events, $this->awardCorner($side));
@@ -815,6 +818,9 @@ class SimulationEngine
         ]);
 
         $events[] = $this->buildEvent('shot_blocked', $side, $shooter, $defender, 'blocked', $sequence);
+
+        // Scatter ball after block so repeat shots don't share exact position
+        $this->jitterBall();
 
         if (random_int(1, 100) <= 50) {
             $events = array_merge($events, $this->awardCorner($side));
