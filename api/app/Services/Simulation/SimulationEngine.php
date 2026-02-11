@@ -120,8 +120,10 @@ class SimulationEngine
         $match->loadMissing([
             'homeTeam.players.attributes',
             'homeTeam.players.primaryPosition',
+            'homeTeam.primaryTactic',
             'awayTeam.players.attributes',
             'awayTeam.players.primaryPosition',
+            'awayTeam.primaryTactic',
             'homeFormation',
             'awayFormation',
         ]);
@@ -130,6 +132,8 @@ class SimulationEngine
         $this->state->awayTeam = $match->awayTeam;
         $this->state->homeFormation = $match->homeFormation;
         $this->state->awayFormation = $match->awayFormation;
+        $this->state->homeTactic = $match->homeTeam->primaryTactic;
+        $this->state->awayTactic = $match->awayTeam->primaryTactic;
 
         // --- Home team: try stored lineup first ---
         if (!$this->loadStoredLineup($match, 'home')) {
@@ -192,6 +196,7 @@ class SimulationEngine
                 'is_subbed_off' => false,
                 'goals' => 0,
                 'assists' => 0,
+                'morale' => 7.0,
                 'position' => $entry->position,
             ];
         }
@@ -213,6 +218,7 @@ class SimulationEngine
                     'is_subbed_off' => false,
                     'goals' => 0,
                     'assists' => 0,
+                    'morale' => 7.0,
                     'position' => $primaryAbbr,
                 ];
             }
@@ -293,6 +299,7 @@ class SimulationEngine
                 'is_subbed_off' => false,
                 'goals' => 0,
                 'assists' => 0,
+                'morale' => 7.0,
                 'position' => $posAbbr,
             ];
         }
@@ -310,6 +317,7 @@ class SimulationEngine
                     'is_subbed_off' => false,
                     'goals' => 0,
                     'assists' => 0,
+                    'morale' => 7.0,
                     'position' => $primaryAbbr,
                 ];
             }
@@ -379,6 +387,9 @@ class SimulationEngine
 
             // Update fatigue for all active players
             $this->updateFatigue();
+
+            // Decay morale toward neutral each minute
+            $this->state->decayMorale();
 
             // Decide possession for this minute
             $this->resolvePossession();
@@ -450,26 +461,64 @@ class SimulationEngine
             $roll = random_int(1, 100);
             $inAttackingThird = $this->isInAttackingThird($side);
 
-            if ($inAttackingThird && $roll <= 15) {
-                // In attacking third: 15% chance of shot attempt (was 20%)
+            // Get tactical context for probability modifiers
+            $tactic = $side === 'home' ? $this->state->homeTactic : $this->state->awayTactic;
+            $mentality = $tactic->mentality ?? 'balanced';
+
+            // Modify shot threshold based on mentality
+            $shotThreshold = 15; // base
+            if ($mentality === 'very_attacking') {
+                $shotThreshold = 22;
+            } elseif ($mentality === 'attacking') {
+                $shotThreshold = 18;
+            } elseif ($mentality === 'defensive') {
+                $shotThreshold = 10;
+            } elseif ($mentality === 'very_defensive') {
+                $shotThreshold = 7;
+            }
+
+            // Modify foul rate based on opponent's tackle_harder
+            $oppSide = $this->state->opponent($side);
+            $oppTactic = $oppSide === 'home' ? $this->state->homeTactic : $this->state->awayTactic;
+            $foulBase = 10;
+            if ($oppTactic && ($oppTactic->tackle_harder || $oppTactic->get_stuck_in)) {
+                $foulBase = 15;
+            }
+            if ($oppTactic && (($oppTactic->tackling ?? 'balanced') === 'stay_on_feet')) {
+                $foulBase = 7;
+            }
+
+            // Modify defensive action threshold based on opponent's pressing
+            $defActionBase = 15;
+            if ($oppTactic) {
+                $oppPressing = $oppTactic->pressing ?? 'sometimes';
+                if (in_array($oppPressing, ['often', 'always'], true)) {
+                    $defActionBase = 22;
+                } elseif (in_array($oppPressing, ['rarely', 'never'], true)) {
+                    $defActionBase = 10;
+                }
+            }
+
+            if ($inAttackingThird && $roll <= $shotThreshold) {
+                // Shot attempt
                 $shotEvents = $this->resolveShot($side, null, $sequence);
                 $events = array_merge($events, $shotEvents);
                 $sequence = []; // reset after shot
                 break; // shot ends the passage
-            } elseif ($roll <= 10) {
-                // 10% foul interrupts play
+            } elseif ($roll <= $shotThreshold + $foulBase) {
+                // Foul interrupts play
                 $foulEvents = $this->simulateFoul();
                 $events = array_merge($events, $foulEvents);
                 $sequence = [];
                 break;
-            } elseif ($roll <= 25) {
-                // 15% turnover (tackle or interception) — was 10%
+            } elseif ($roll <= $shotThreshold + $foulBase + $defActionBase) {
+                // Turnover (tackle or interception)
                 $defEvents = $this->simulateDefensiveAction();
                 $events = array_merge($events, $defEvents);
                 $sequence = [];
                 break;
-            } elseif ($roll <= 27 && $inAttackingThird && $lastActionWasPass) {
-                // 2% offside, only after a pass and in attacking third (was 5%)
+            } elseif ($roll <= $shotThreshold + $foulBase + $defActionBase + 2 && $inAttackingThird && $lastActionWasPass) {
+                // 2% offside, only after a pass and in attacking third
                 $offEvents = $this->simulateOffside();
                 $events = array_merge($events, $offEvents);
                 $sequence = [];
@@ -607,19 +656,31 @@ class SimulationEngine
         $gk = $this->state->getGoalkeeper($defSide);
         $defender = $this->pickWeightedPlayer($defSide, self::DEFENSIVE_POSITIONS, 'positioning');
 
+        // Shooter attributes
         $finishing = $this->state->getEffectiveAttribute($shooter->id, 'finishing');
         $composure = $this->state->getEffectiveAttribute($shooter->id, 'composure');
         $longShots = $this->state->getEffectiveAttribute($shooter->id, 'long_shots');
+        $technique = $this->state->getEffectiveAttribute($shooter->id, 'technique');
+        $decisions = $this->state->getEffectiveAttribute($shooter->id, 'decisions');
+        $firstTouch = $this->state->getEffectiveAttribute($shooter->id, 'first_touch');
+
+        // GK attributes
         $gkReflexes = $gk ? $this->state->getEffectiveAttribute($gk->id, 'reflexes') : 10.0;
         $gkHandling = $gk ? $this->state->getEffectiveAttribute($gk->id, 'handling') : 10.0;
+        $gkOneOnOnes = $gk ? $this->state->getEffectiveAttribute($gk->id, 'one_on_ones') : 10.0;
+        $gkPositioning = $gk ? $this->state->getEffectiveAttribute($gk->id, 'positioning') : 10.0;
+
+        // Defender attributes
         $defPositioning = $defender ? $this->state->getEffectiveAttribute($defender->id, 'positioning') : 10.0;
         $defMarking = $defender ? $this->state->getEffectiveAttribute($defender->id, 'marking') : 10.0;
+        $defConcentration = $defender ? $this->state->getEffectiveAttribute($defender->id, 'concentration') : 10.0;
+        $defStrength = $defender ? $this->state->getEffectiveAttribute($defender->id, 'strength') : 10.0;
 
         $this->state->stats[$side]['shots']++;
 
         // Decision: blocked before shot (25%)
-        $blockChance = 25 + ($defPositioning + $defMarking - 20) * 0.5;
-        $blockChance = max(10, min(40, $blockChance));
+        $blockChance = 25 + ($defPositioning + $defMarking - 20) * 0.4 + ($defConcentration - 10) * 0.3 + ($defStrength - 10) * 0.2;
+        $blockChance = max(10, min(45, $blockChance));
 
         if (random_int(1, 100) <= (int) $blockChance) {
             // Blocked by defender
@@ -640,7 +701,12 @@ class SimulationEngine
         }
 
         // Shot goes off: 40% off target
-        $missChance = 40 - ($finishing - 10) * 1.5 - ($composure - 10) * 0.5;
+        $inAttackingThird = $this->isInAttackingThird($side);
+        $missChance = 40 - ($finishing - 10) * 1.2 - ($composure - 10) * 0.4 - ($technique - 10) * 0.3 - ($decisions - 10) * 0.2;
+        if (!$inAttackingThird) {
+            $missChance += 5; // long-range shots are harder, but use longShots to offset
+            $missChance -= ($longShots - 10) * 0.5;
+        }
         $missChance = max(15, min(60, $missChance));
 
         if (random_int(1, 100) <= (int) $missChance) {
@@ -658,7 +724,8 @@ class SimulationEngine
         $this->state->stats[$side]['shots_on_target']++;
 
         // Goal chance: ~25% of on-target shots = ~9% of total shots
-        $goalChance = 25 + ($finishing - 10) * 1.0 + ($composure - 10) * 0.5 - ($gkReflexes - 10) * 0.8;
+        $goalChance = 25 + ($finishing - 10) * 0.8 + ($composure - 10) * 0.4 + ($firstTouch - 10) * 0.2
+            - ($gkReflexes - 10) * 0.6 - ($gkOneOnOnes - 10) * 0.2 - ($gkPositioning - 10) * 0.2;
         $goalChance = max(10, min(45, $goalChance));
 
         $ballStart = $this->state->ball;
@@ -676,8 +743,12 @@ class SimulationEngine
             // Update score
             $this->state->score[$side]++;
             $this->state->playerStates[$shooter->id]['goals']++;
+            $this->state->updatePlayerMorale($shooter->id, 'goal_scored');
+            $this->state->updateTeamMorale($side, 0.5);
+            $this->state->updateTeamMorale($defSide, -0.3);
             if ($assistProvider && $assistProvider->id !== $shooter->id) {
                 $this->state->playerStates[$assistProvider->id]['assists']++;
+                $this->state->updatePlayerMorale($assistProvider->id, 'assist');
             }
 
             // Possession goes to conceding team
@@ -688,7 +759,7 @@ class SimulationEngine
         }
 
         // Save: 50% of non-goal on-target shots
-        $saveChance = 50 + ($gkReflexes + $gkHandling - 20) * 0.5;
+        $saveChance = 50 + ($gkReflexes + $gkHandling - 20) * 0.4 + ($gkPositioning - 10) * 0.3;
         $saveChance = max(30, min(75, $saveChance));
 
         if (random_int(1, 100) <= (int) $saveChance) {
@@ -807,10 +878,26 @@ class SimulationEngine
     {
         $events = [];
         $aggression = $this->state->getEffectiveAttribute($fouler->id, 'aggression');
+        $bravery = $this->state->getEffectiveAttribute($fouler->id, 'bravery');
 
         // Yellow card: ~15% base, modified by aggression
         $yellowChance = 15 + ($aggression - 10) * 1.0;
-        $yellowChance = max(5, min(35, $yellowChance));
+
+        // Tactic: tackle_harder increases card chance
+        $tactic = $side === 'home' ? $this->state->homeTactic : $this->state->awayTactic;
+        if ($tactic && ($tactic->tackle_harder || $tactic->get_stuck_in)) {
+            $yellowChance += 5;
+        }
+        // Stay on feet reduces card chance
+        if ($tactic && (($tactic->tackling ?? 'balanced') === 'stay_on_feet')) {
+            $yellowChance -= 3;
+        }
+        // Brave players with good decisions less likely to get carded
+        if ($bravery > 14) {
+            $yellowChance -= 2;
+        }
+
+        $yellowChance = max(5, min(40, $yellowChance));
 
         // Red card: ~1% base
         $redChance = 1 + max(0, ($aggression - 15)) * 0.5;
@@ -819,6 +906,8 @@ class SimulationEngine
             // Straight red
             $this->state->stats[$side]['red_cards']++;
             $this->state->playerStates[$fouler->id]['is_sent_off'] = true;
+            $this->state->updatePlayerMorale($fouler->id, 'red_card');
+            $this->state->updateTeamMorale($side, -0.8);
 
             $events[] = $this->buildEvent('red_card', $side, $fouler, null, 'sent_off', []);
             return $events;
@@ -827,6 +916,7 @@ class SimulationEngine
         if (random_int(1, 100) <= (int) $yellowChance) {
             $this->state->playerStates[$fouler->id]['yellow_cards']++;
             $this->state->stats[$side]['yellow_cards']++;
+            $this->state->updatePlayerMorale($fouler->id, 'yellow_card');
 
             if ($this->state->playerStates[$fouler->id]['yellow_cards'] >= 2) {
                 // Second yellow = red
@@ -871,7 +961,9 @@ class SimulationEngine
         $gk = $this->state->getGoalkeeper($defSide);
 
         $penTaking = $this->state->getEffectiveAttribute($taker->id, 'penalty_taking');
+        $composure = $this->state->getEffectiveAttribute($taker->id, 'composure');
         $gkReflexes = $gk ? $this->state->getEffectiveAttribute($gk->id, 'reflexes') : 10.0;
+        $gkOneOnOnes = $gk ? $this->state->getEffectiveAttribute($gk->id, 'one_on_ones') : 10.0;
 
         $penSpot = $this->penaltySpotPosition($attSide);
         $goalPos = $this->goalPosition($attSide);
@@ -879,8 +971,8 @@ class SimulationEngine
         $this->state->stats[$attSide]['shots']++;
         $this->state->stats[$attSide]['shots_on_target']++;
 
-        // 75% goal base, modified by penalty_taking vs GK reflexes
-        $goalChance = 75 + ($penTaking - 10) * 0.8 - ($gkReflexes - 10) * 0.6;
+        // 75% goal base, modified by penalty_taking + composure vs GK reflexes + one_on_ones
+        $goalChance = 75 + ($penTaking - 10) * 0.6 + ($composure - 10) * 0.3 - ($gkReflexes - 10) * 0.4 - ($gkOneOnOnes - 10) * 0.3;
         $goalChance = max(55, min(90, $goalChance));
 
         $sequence = [
@@ -892,6 +984,9 @@ class SimulationEngine
             $events[] = $this->buildEvent('penalty', $attSide, $taker, null, 'goal', $sequence);
             $this->state->score[$attSide]++;
             $this->state->playerStates[$taker->id]['goals']++;
+            $this->state->updatePlayerMorale($taker->id, 'goal_scored');
+            $this->state->updateTeamMorale($attSide, 0.5);
+            $this->state->updateTeamMorale($defSide, -0.3);
             $this->state->possession = $defSide;
             $this->state->ball = ['x' => 50.0, 'y' => 50.0];
         } else {
@@ -899,6 +994,12 @@ class SimulationEngine
             $sequence[] = $this->buildSequenceAction('save', $gk ?? $taker, $goalPos, $goalPos, random_int(150, 350));
             $events[] = $this->buildEvent('penalty', $attSide, $taker, $gk, 'saved', $sequence);
             $this->state->stats[$defSide]['saves']++;
+            $this->state->updatePlayerMorale($taker->id, 'missed_penalty');
+            $this->state->updateTeamMorale($attSide, -0.5);
+            if ($gk) {
+                $this->state->updatePlayerMorale($gk->id, 'penalty_saved_by_gk');
+            }
+            $this->state->updateTeamMorale($defSide, 0.3);
         }
 
         return $events;
@@ -985,18 +1086,39 @@ class SimulationEngine
 
         $events[] = $this->buildEvent('corner', $side, $taker, null, 'success', $sequence);
 
-        // Header attempt (60% of corners lead to a header)
+        // GK claim attempt before header
+        $gk = $this->state->getGoalkeeper($this->state->opponent($side));
+        $gkAerialReach = $gk ? $this->state->getEffectiveAttribute($gk->id, 'aerial_reach') : 10.0;
+        $gkCommandArea = $gk ? $this->state->getEffectiveAttribute($gk->id, 'command_of_area') : 10.0;
+
+        // GK claims cross: 20% base, +3% per aerial_reach above 10, +2% per command
+        $claimChance = 20 + ($gkAerialReach - 10) * 3.0 + ($gkCommandArea - 10) * 2.0;
+        $claimChance = max(5, min(50, $claimChance));
+
+        if (random_int(1, 100) <= (int) $claimChance) {
+            // GK claims cross, no header
+            if ($gk) {
+                $claimSequence = [
+                    $this->buildSequenceAction('save', $gk, $targetPos, $targetPos, random_int(200, 400)),
+                ];
+                $events[] = $this->buildEvent('save', $this->state->opponent($side), $gk, null, 'claimed', $claimSequence);
+            }
+            return $events;
+        }
+
+        // Header attempt (60% of corners lead to a header, after GK doesn't claim)
         if (random_int(1, 100) <= 60) {
             $header = $this->pickWeightedPlayer($side, ['CB', 'ST', 'CF', 'SW'], 'heading');
             if ($header) {
                 $headingAttr = $this->state->getEffectiveAttribute($header->id, 'heading');
                 $jumpingAttr = $this->state->getEffectiveAttribute($header->id, 'jumping_reach');
-                $gk = $this->state->getGoalkeeper($this->state->opponent($side));
+                $headerStrength = $this->state->getEffectiveAttribute($header->id, 'strength');
+                $headerBravery = $this->state->getEffectiveAttribute($header->id, 'bravery');
 
                 $this->state->stats[$side]['shots']++;
 
-                // Header on target: base 40%, modified by heading + jumping
-                $onTargetChance = 40 + ($headingAttr + $jumpingAttr - 20) * 0.8;
+                // Header on target: base 40%, modified by heading + jumping + strength + bravery
+                $onTargetChance = 40 + ($headingAttr + $jumpingAttr - 20) * 0.6 + ($headerStrength - 10) * 0.3 + ($headerBravery - 10) * 0.2;
                 $onTargetChance = max(20, min(65, $onTargetChance));
 
                 if (random_int(1, 100) <= (int) $onTargetChance) {
@@ -1017,6 +1139,10 @@ class SimulationEngine
                         $this->state->score[$side]++;
                         $this->state->playerStates[$header->id]['goals']++;
                         $this->state->playerStates[$taker->id]['assists']++;
+                        $this->state->updatePlayerMorale($header->id, 'goal_scored');
+                        $this->state->updatePlayerMorale($taker->id, 'assist');
+                        $this->state->updateTeamMorale($side, 0.5);
+                        $this->state->updateTeamMorale($this->state->opponent($side), -0.3);
                         $this->state->possession = $this->state->opponent($side);
                         $this->state->ball = ['x' => 50.0, 'y' => 50.0];
                     } else {
@@ -1095,17 +1221,37 @@ class SimulationEngine
             return [];
         }
 
+        $kicking = $this->state->getEffectiveAttribute($gk->id, 'kicking');
+        $throwing = $this->state->getEffectiveAttribute($gk->id, 'throwing');
+
         // Goal kick starts from the 6-yard box
         $gkX = $defSide === 'home' ? 6.0 : 94.0;
         $this->state->ball = ['x' => $gkX, 'y' => (float) random_int(35, 65)];
 
-        // Goal kick: 60% possession goes to kicking team, 40% opponent wins it
-        if (random_int(1, 100) <= 60) {
+        // GK distribution based on tactic
+        $tactic = $defSide === 'home' ? $this->state->homeTactic : $this->state->awayTactic;
+        $useShort = false;
+        if ($tactic && ($tactic->take_short_kicks || $tactic->roll_out || $tactic->play_out_of_defence)) {
+            $useShort = true;
+        }
+
+        // Goal kick retention based on kicking/throwing quality
+        $retainBase = 60 + ($kicking - 10) * 1.5;
+        if ($useShort) {
+            $retainBase += 10; // Short distribution retains better
+        }
+        $retainBase = max(40, min(85, $retainBase));
+
+        if (random_int(1, 100) <= (int) $retainBase) {
             $this->state->possession = $defSide;
         }
 
-        // Ball lands in midfield after the kick
-        $landX = $defSide === 'home' ? (float) random_int(35, 55) : (float) random_int(45, 65);
+        // Ball lands based on distribution type
+        if ($useShort) {
+            $landX = $defSide === 'home' ? (float) random_int(15, 30) : (float) random_int(70, 85);
+        } else {
+            $landX = $defSide === 'home' ? (float) random_int(35, 55) : (float) random_int(45, 65);
+        }
         $this->state->ball = ['x' => $landX, 'y' => (float) random_int(25, 75)];
 
         return [$this->buildEvent('goal_kick', $defSide, $gk, null, 'success', [])];
@@ -1129,44 +1275,80 @@ class SimulationEngine
         $roll = random_int(1, 100);
 
         if ($roll <= 45) {
-            // Tackle
+            // Tackle - use strength + tackling + anticipation
             $tackler = $this->pickWeightedPlayer($defSide, self::DEFENSIVE_POSITIONS, 'tackling');
             $attacker = $this->pickWeightedPlayer($attSide, self::SHOOTING_POSITIONS, 'dribbling');
-            if ($tackler) {
+            if ($tackler && $attacker) {
+                // Tackle success influenced by both players
+                $tackleSkill = $this->state->getEffectiveAttribute($tackler->id, 'tackling');
+                $tacklerStrength = $this->state->getEffectiveAttribute($tackler->id, 'strength');
+                $dribbleSkill = $this->state->getEffectiveAttribute($attacker->id, 'dribbling');
+                $attackerAgility = $this->state->getEffectiveAttribute($attacker->id, 'agility');
+
+                // Tackle succeeds based on tackling+strength vs dribbling+agility
+                $tackleChance = 60 + ($tackleSkill + $tacklerStrength - $dribbleSkill - $attackerAgility) * 0.5;
+                $tackleChance = max(30, min(85, $tackleChance));
+
+                if (random_int(1, 100) <= (int) $tackleChance) {
+                    // Successful tackle
+                    $ballPos = $this->state->ball;
+                    $sequence = [
+                        $this->buildSequenceAction('tackle', $tackler, $ballPos, $ballPos, random_int(200, 400)),
+                    ];
+                    $events[] = $this->buildEvent('tackle', $defSide, $tackler, $attacker, 'success', $sequence);
+                    $this->state->stats[$defSide]['tackles']++;
+                    $this->state->possession = $defSide;
+                }
+                // Failed tackle: attacker keeps possession, no event emitted
+            } elseif ($tackler) {
+                // No attacker found, simple tackle
                 $ballPos = $this->state->ball;
                 $sequence = [
                     $this->buildSequenceAction('tackle', $tackler, $ballPos, $ballPos, random_int(200, 400)),
                 ];
-                $events[] = $this->buildEvent('tackle', $defSide, $tackler, $attacker, 'success', $sequence);
+                $events[] = $this->buildEvent('tackle', $defSide, $tackler, null, 'success', $sequence);
                 $this->state->stats[$defSide]['tackles']++;
                 $this->state->possession = $defSide;
             }
         } elseif ($roll <= 80) {
-            // Interception
+            // Interception - use anticipation + concentration + vision
             $interceptor = $this->pickWeightedPlayer($defSide, self::DEFENSIVE_POSITIONS, 'anticipation');
             if ($interceptor) {
-                $ballPos = $this->state->ball;
-                // Interceptor moves to the ball and carries it slightly
-                $newX = max(0.0, min(100.0, $ballPos['x'] + random_int(-8, 8)));
-                $newY = max(5.0, min(95.0, $ballPos['y'] + random_int(-8, 8)));
-                $newPos = ['x' => $newX, 'y' => $newY];
-                $sequence = [
-                    $this->buildSequenceAction('run', $interceptor, $ballPos, $newPos, random_int(200, 500)),
-                ];
-                $events[] = $this->buildEvent('interception', $defSide, $interceptor, null, 'success', $sequence);
-                $this->state->stats[$defSide]['tackles']++;
-                $this->state->ball = $newPos;
-                $this->state->possession = $defSide;
+                $anticipation = $this->state->getEffectiveAttribute($interceptor->id, 'anticipation');
+                $concentration = $this->state->getEffectiveAttribute($interceptor->id, 'concentration');
+                $teamwork = $this->state->getEffectiveAttribute($interceptor->id, 'teamwork');
+
+                // Success chance based on anticipation + concentration
+                $interceptChance = 70 + ($anticipation + $concentration - 20) * 0.5 + ($teamwork - 10) * 0.3;
+                $interceptChance = max(50, min(90, $interceptChance));
+
+                if (random_int(1, 100) <= (int) $interceptChance) {
+                    $ballPos = $this->state->ball;
+                    $newX = max(0.0, min(100.0, $ballPos['x'] + random_int(-8, 8)));
+                    $newY = max(5.0, min(95.0, $ballPos['y'] + random_int(-8, 8)));
+                    $newPos = ['x' => $newX, 'y' => $newY];
+                    $sequence = [
+                        $this->buildSequenceAction('run', $interceptor, $ballPos, $newPos, random_int(200, 500)),
+                    ];
+                    $events[] = $this->buildEvent('interception', $defSide, $interceptor, null, 'success', $sequence);
+                    $this->state->stats[$defSide]['tackles']++;
+                    $this->state->ball = $newPos;
+                    $this->state->possession = $defSide;
+                }
             }
         } else {
-            // Clearance
+            // Clearance - use heading + strength + bravery
             $clearer = $this->pickWeightedPlayer($defSide, ['CB', 'SW', 'DM'], 'heading');
             if ($clearer) {
+                $heading = $this->state->getEffectiveAttribute($clearer->id, 'heading');
+                $strength = $this->state->getEffectiveAttribute($clearer->id, 'strength');
+                $bravery = $this->state->getEffectiveAttribute($clearer->id, 'bravery');
+
                 $ballStart = $this->state->ball;
-                // Clearance sends ball toward midfield/flank, not dead center
+                $clearDistance = 15 + ($heading - 10) * 1.0 + ($strength - 10) * 0.5;
                 $clearX = $defSide === 'home'
-                    ? (float) random_int(40, 65)
-                    : (float) random_int(35, 60);
+                    ? min(70.0, $ballStart['x'] + $clearDistance)
+                    : max(30.0, $ballStart['x'] - $clearDistance);
                 $ballEnd = ['x' => $clearX, 'y' => (float) random_int(15, 85)];
                 $sequence = [
                     $this->buildSequenceAction('clearance', $clearer, $ballStart, $ballEnd, random_int(200, 400)),
@@ -1197,6 +1379,32 @@ class SimulationEngine
         $player = $this->pickWeightedPlayer($side, ['ST', 'CF', 'F9', 'LW', 'RW'], 'pace');
         if (!$player) {
             return [];
+        }
+
+        // Offside check: off_the_ball and decisions reduce offside likelihood
+        $offTheBall = $this->state->getEffectiveAttribute($player->id, 'off_the_ball');
+        $playerDecisions = $this->state->getEffectiveAttribute($player->id, 'decisions');
+        $anticipation = $this->state->getEffectiveAttribute($player->id, 'anticipation');
+
+        // Smart players avoid offside more often
+        $avoidChance = ($offTheBall + $playerDecisions + $anticipation - 30) * 2.0;
+        $avoidChance = max(0, min(60, $avoidChance));
+
+        if (random_int(1, 100) <= (int) $avoidChance) {
+            // Player was smart enough to time the run - no offside
+            return [];
+        }
+
+        // Check defending team's offside trap
+        $defSide = $this->state->opponent($side);
+        $defTactic = $defSide === 'home' ? $this->state->homeTactic : $this->state->awayTactic;
+        if ($defTactic && ($defTactic->use_offside_trap || $defTactic->offside_trap)) {
+            // Offside trap increases offside catch rate - GK communication helps execute it
+            $gk = $this->state->getGoalkeeper($defSide);
+            if ($gk) {
+                $communication = $this->state->getEffectiveAttribute($gk->id, 'communication');
+                // Better communication = trap works more often (already past the check, so we continue)
+            }
         }
 
         $this->state->stats[$side]['offsides']++;
@@ -1313,6 +1521,7 @@ class SimulationEngine
         }
 
         // Execute substitution
+        $this->state->updatePlayerMorale($mostFatigued->id, 'substituted_off');
         $this->state->playerStates[$mostFatigued->id]['is_subbed_off'] = true;
         $this->state->playerStates[$bestSub->id]['position'] = $outPosition;
         $this->state->playerStates[$bestSub->id]['fatigue'] = 0.0;
@@ -1372,8 +1581,28 @@ class SimulationEngine
      */
     private function resolvePossession(): void
     {
-        // Base: keep current possession 80% of the time
-        if (random_int(1, 100) <= 80) {
+        // Base keep rate, modified by tempo and directness
+        $keepRate = 80;
+        $tactic = $this->state->possession === 'home' ? $this->state->homeTactic : $this->state->awayTactic;
+        if ($tactic) {
+            $tempo = $tactic->tempo ?? 'standard';
+            if ($tempo === 'very_slow' || $tempo === 'slow') {
+                $keepRate = 85; // Slow play keeps ball better
+            }
+            if ($tempo === 'very_fast' || $tempo === 'fast') {
+                $keepRate = 75; // Fast play loses ball more
+            }
+
+            $directness = $tactic->passing_directness ?? 'mixed';
+            if ($directness === 'short') {
+                $keepRate += 3;
+            }
+            if ($directness === 'direct' || $directness === 'very_direct') {
+                $keepRate -= 5;
+            }
+        }
+
+        if (random_int(1, 100) <= $keepRate) {
             return;
         }
 
@@ -1406,7 +1635,13 @@ class SimulationEngine
         foreach ($players as $id => $player) {
             $passing = $this->state->getEffectiveAttribute($id, 'passing');
             $technique = $this->state->getEffectiveAttribute($id, 'technique');
-            $total += $passing + $technique;
+            $vision = $this->state->getEffectiveAttribute($id, 'vision');
+            $firstTouch = $this->state->getEffectiveAttribute($id, 'first_touch');
+            $composure = $this->state->getEffectiveAttribute($id, 'composure');
+            $decisions = $this->state->getEffectiveAttribute($id, 'decisions');
+
+            // Weighted: passing and technique most important, then vision, composure, first_touch, decisions
+            $total += $passing * 0.25 + $technique * 0.20 + $vision * 0.20 + $firstTouch * 0.15 + $composure * 0.10 + $decisions * 0.10;
             $count++;
         }
 
@@ -1434,15 +1669,40 @@ class SimulationEngine
             }
 
             $stamina = (float) ($player->attributes->stamina ?? 10);
+            $naturalFitness = (float) ($player->attributes->natural_fitness ?? 10);
+            // Combine stamina with natural_fitness for effective stamina
+            $effectiveStamina = $stamina * (1.0 + ($naturalFitness - 10) / 40.0);
+
             // Base fatigue gain per minute: ~0.8-1.5% depending on stamina
             // Higher stamina = less fatigue gained
-            $fatigueRate = 0.015 - ($stamina / 20.0) * 0.007; // range ~0.008 to 0.015
+            $fatigueRate = 0.015 - ($effectiveStamina / 20.0) * 0.007;
             $fatigueRate = max(0.005, $fatigueRate);
 
-            // Work rate increases fatigue for outfield players
+            // Work rate + determination affect fatigue
             $workRate = (float) ($player->attributes->work_rate ?? 10);
+            $determination = (float) ($player->attributes->determination ?? 10);
             if ($workRate > 14) {
                 $fatigueRate *= 1.1; // hard workers tire slightly faster
+            }
+            // High determination provides slight fatigue resistance
+            if ($determination > 15) {
+                $fatigueRate *= 0.95;
+            }
+
+            // Tactic: high pressing and fast tempo increase fatigue
+            $side = isset($this->state->homeLineup[$id]) ? 'home' : (isset($this->state->awayLineup[$id]) ? 'away' : null);
+            if ($side) {
+                $tactic = $side === 'home' ? $this->state->homeTactic : $this->state->awayTactic;
+                if ($tactic) {
+                    $pressing = $tactic->pressing ?? 'sometimes';
+                    if (in_array($pressing, ['often', 'always'], true)) {
+                        $fatigueRate *= 1.15;
+                    }
+                    $tempo = $tactic->tempo ?? 'standard';
+                    if ($tempo === 'very_fast' || $tempo === 'fast') {
+                        $fatigueRate *= 1.10;
+                    }
+                }
             }
 
             $pState['fatigue'] = min(1.0, $pState['fatigue'] + $fatigueRate);
@@ -1526,6 +1786,7 @@ class SimulationEngine
      */
     private function simulatePass(string $side, array $currentSequence): ?array
     {
+        // Use BOTH passing and vision for passer selection (creative players)
         $passer = $this->pickWeightedPlayer($side, self::CREATIVE_POSITIONS, 'passing');
         if (!$passer) {
             return null;
@@ -1535,6 +1796,34 @@ class SimulationEngine
         $receiver = $this->pickReceiverExcluding($side, $passer->id);
         if (!$receiver) {
             return null;
+        }
+
+        $passingAttr = $this->state->getEffectiveAttribute($passer->id, 'passing');
+        $vision = $this->state->getEffectiveAttribute($passer->id, 'vision');
+        $receiverFirstTouch = $this->state->getEffectiveAttribute($receiver->id, 'first_touch');
+        $receiverOffTheBall = $this->state->getEffectiveAttribute($receiver->id, 'off_the_ball');
+
+        // Pass completion check: based on passing + vision vs opponent pressing
+        $passQuality = ($passingAttr + $vision) / 2.0;
+        $receiveQuality = ($receiverFirstTouch + $receiverOffTheBall) / 2.0;
+        $completionChance = 75 + ($passQuality - 10) * 1.0 + ($receiveQuality - 10) * 0.5;
+
+        // Tactic: direct passing reduces completion
+        $tactic = $side === 'home' ? $this->state->homeTactic : $this->state->awayTactic;
+        if ($tactic) {
+            $directness = $tactic->passing_directness ?? 'mixed';
+            if ($directness === 'direct' || $directness === 'very_direct') {
+                $completionChance -= 8;
+            } elseif ($directness === 'short') {
+                $completionChance += 5;
+            }
+        }
+        $completionChance = max(50, min(95, $completionChance));
+
+        if (random_int(1, 100) > (int) $completionChance) {
+            // Pass intercepted! Turnover
+            $this->state->possession = $this->state->opponent($side);
+            return null; // Failed pass, no sequence added
         }
 
         $ballStart = $this->state->ball;
@@ -1564,10 +1853,26 @@ class SimulationEngine
             return null;
         }
 
-        $ballStart = $this->state->ball;
-        $this->advanceBall($side, 5.0, 15.0);
+        $dribbling = $this->state->getEffectiveAttribute($carrier->id, 'dribbling');
+        $agility = $this->state->getEffectiveAttribute($carrier->id, 'agility');
+        $acceleration = $this->state->getEffectiveAttribute($carrier->id, 'acceleration');
+        $balance = $this->state->getEffectiveAttribute($carrier->id, 'balance');
+        $flair = $this->state->getEffectiveAttribute($carrier->id, 'flair');
 
-        $step = $this->buildSequenceAction('dribble', $carrier, $ballStart, $this->state->ball, random_int(400, 800));
+        // Dribble distance influenced by pace/acceleration
+        $minDx = 5.0 + ($acceleration - 10) * 0.3;
+        $maxDx = 15.0 + ($agility - 10) * 0.5;
+
+        $ballStart = $this->state->ball;
+        $this->advanceBall($side, $minDx, $maxDx);
+
+        // Flair chance: high flair = skill move (adds visual flair to sequence)
+        $actionType = 'dribble';
+        if ($flair > 15 && random_int(1, 100) <= 20) {
+            $actionType = 'skill_move'; // Special animation cue
+        }
+
+        $step = $this->buildSequenceAction($actionType, $carrier, $ballStart, $this->state->ball, random_int(400, 800));
         $currentSequence[] = $step;
 
         return ['sequence' => $currentSequence];
