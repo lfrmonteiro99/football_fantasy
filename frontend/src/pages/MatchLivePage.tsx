@@ -410,14 +410,23 @@ const MatchLivePage: React.FC = () => {
   const {
     players: seqPlayers,
     ball: seqBall,
+    ballHeight: seqBallHeight,
+    ballTransitionMs: seqBallTransition,
+    ballCarrierId: seqBallCarrier,
     transitionDurationMs: seqTransition,
     isAnimating: seqAnimating,
     activePlayerId,
+    trails: seqTrails,
+    overlays: seqOverlays,
+    directionVectors: seqDirVectors,
   } = useSequencePlayer(
     possessionShiftedPlayers,
     currentEvents,
-    tickCounter,       // CHANGED from currentTick?.minute ?? -1
+    tickCounter,
     speed !== 'instant', // disable animation in instant mode
+    currentTick?.zone,
+    currentTick?.possession,
+    minute,
   );
 
   // Always use sequence player output (it returns basePlayers when not animating)
@@ -426,6 +435,7 @@ const MatchLivePage: React.FC = () => {
   const ballPosition = seqAnimating && seqBall ? seqBall : tickBallPosition;
   // Transition: during animation use step timing, between ticks use smooth 600ms
   const pitchTransitionMs = seqAnimating ? seqTransition : 600;
+  const pitchBallTransitionMs = seqAnimating ? seqBallTransition : 600;
 
   // Timeline events
   const timelineEvents = useMemo(
@@ -472,7 +482,13 @@ const MatchLivePage: React.FC = () => {
                 awayColor={awayColor}
                 animated={true}
                 transitionDurationMs={pitchTransitionMs}
+                ballTransitionMs={pitchBallTransitionMs}
                 highlightedPlayerId={activePlayerId}
+                ballHeight={seqBallHeight}
+                ballCarrierId={seqBallCarrier}
+                trails={seqTrails}
+                overlays={seqOverlays}
+                directionVectors={seqDirVectors}
               />
             </div>
           </div>
