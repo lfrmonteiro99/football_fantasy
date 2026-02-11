@@ -724,7 +724,9 @@ class SimulationEngine
 
             // Blocked shot: 50% corner, 50% loose ball
             if (random_int(1, 100) <= 50) {
-                $events = array_merge($events, $this->awardCorner($side));
+                $goalLine = $this->goalPosition($side);
+                $goalLine['y'] += random_int(-10, 10);
+                $events = array_merge($events, $this->awardCorner($side, $goalLine));
             }
 
             return $events;
@@ -796,16 +798,28 @@ class SimulationEngine
             // Save
             $this->state->stats[$defSide]['saves']++;
 
-            $sequence = array_merge($priorSequence, [
-                $this->buildSequenceAction('shoot', $shooter, $ballStart, $goalPos, random_int(200, 500)),
-                $this->buildSequenceAction('save', $gk ?? $shooter, $goalPos, $goalPos, random_int(150, 350)),
-            ]);
+            // Determine if save results in corner (35%) or GK holds (65%)
+            $isCorner = random_int(1, 100) <= 35;
+
+            if ($isCorner) {
+                // GK parries/tips the ball behind the goal line
+                $deflectPos = $this->saveDeflectionPosition($side, $goalPos);
+                $sequence = array_merge($priorSequence, [
+                    $this->buildSequenceAction('shoot', $shooter, $ballStart, $goalPos, random_int(200, 500)),
+                    $this->buildSequenceAction('save', $gk ?? $shooter, $goalPos, $deflectPos, random_int(150, 350)),
+                ]);
+            } else {
+                // GK catches or holds the ball
+                $sequence = array_merge($priorSequence, [
+                    $this->buildSequenceAction('shoot', $shooter, $ballStart, $goalPos, random_int(200, 500)),
+                    $this->buildSequenceAction('save', $gk ?? $shooter, $goalPos, $goalPos, random_int(150, 350)),
+                ]);
+            }
 
             $events[] = $this->buildEvent('save', $defSide, $gk ?? $shooter, $shooter, 'saved', $sequence);
 
-            // After save: 60% corner, 40% GK holds
-            if (random_int(1, 100) <= 60) {
-                $events = array_merge($events, $this->awardCorner($side));
+            if ($isCorner) {
+                $events = array_merge($events, $this->awardCorner($side, $deflectPos));
             }
 
             return $events;
@@ -823,7 +837,9 @@ class SimulationEngine
         $this->jitterBall();
 
         if (random_int(1, 100) <= 50) {
-            $events = array_merge($events, $this->awardCorner($side));
+            $goalLine = $this->goalPosition($side);
+            $goalLine['y'] += random_int(-10, 10);
+            $events = array_merge($events, $this->awardCorner($side, $goalLine));
         }
 
         return $events;
@@ -1203,7 +1219,7 @@ class SimulationEngine
      *
      * @return array<int, array>
      */
-    private function awardCorner(string $side): array
+    private function awardCorner(string $side, ?array $ballOutPos = null): array
     {
         // The corner itself as a simple event (not a full corner simulation to avoid deep recursion)
         $takers = $side === 'home' ? $this->state->homeSetPieceTakers : $this->state->awaySetPieceTakers;
@@ -1216,7 +1232,18 @@ class SimulationEngine
         $this->state->stats[$side]['corners']++;
 
         if ($taker) {
-            return [$this->buildEvent('corner', $side, $taker, null, 'success', [])];
+            $cornerPos = $this->cornerPosition($side);
+
+            // If we know where the ball went out, show it traveling to the corner flag
+            $sequence = [];
+            if ($ballOutPos) {
+                // Choose corner flag on the same side the ball went out
+                $cornerPos['y'] = $ballOutPos['y'] < 50 ? 2.0 : 98.0;
+                $sequence[] = $this->buildSequenceAction('run', $taker, $ballOutPos, $cornerPos, random_int(300, 600));
+            }
+
+            $this->state->ball = $cornerPos;
+            return [$this->buildEvent('corner', $side, $taker, null, 'success', $sequence)];
         }
         return [];
     }
@@ -2129,6 +2156,29 @@ class SimulationEngine
         return $side === 'home'
             ? ['x' => 99.0, 'y' => $goalY]
             : ['x' => 1.0, 'y' => $goalY];
+    }
+
+    /**
+     * Position where the ball ends after a GK deflection that goes behind the goal.
+     * Tipped over bar (~65%) or parried past the post (~35%).
+     */
+    private function saveDeflectionPosition(string $side, array $goalPos): array
+    {
+        $tippedOverBar = random_int(1, 100) <= 65;
+
+        if ($tippedOverBar) {
+            // Ball tipped over the bar — goes straight back behind the goal
+            return $side === 'home'
+                ? ['x' => 99.0, 'y' => $goalPos['y'] + random_int(-3, 3)]
+                : ['x' => 1.0, 'y' => $goalPos['y'] + random_int(-3, 3)];
+        }
+
+        // Ball parried wide past the post — deflects to one side
+        $wideDelta = random_int(10, 20) * (random_int(0, 1) === 0 ? -1 : 1);
+        $deflectedY = max(2.0, min(98.0, $goalPos['y'] + $wideDelta));
+        return $side === 'home'
+            ? ['x' => 99.0, 'y' => $deflectedY]
+            : ['x' => 1.0, 'y' => $deflectedY];
     }
 
     /**
