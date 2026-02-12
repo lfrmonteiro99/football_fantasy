@@ -83,24 +83,24 @@ class SimulationEngine
         $this->initializeMatch($match);
 
         // --- First half: minutes 1-45 + injury time ---
-        yield from $this->simulateHalf(1, 45);
+        yield from $this->simulateHalf(1, 45, true);
 
         // Half-time
         $this->state->minute = 45;
         $this->state->phase = 'half_time';
         $htEvents = [$this->buildStructuralEvent('half_time', 'home')];
-        $htCommentary = $this->commentary->buildMinuteCommentary($htEvents, $this->state);
+        $htCommentary = "45' - " . $this->commentary->buildHalfTimeCommentary($this->state);
         yield $this->state->toTickArray($htEvents, $htCommentary);
 
         // --- Second half: minutes 46-90 + injury time ---
         $this->state->possession = $this->state->score['home'] >= $this->state->score['away'] ? 'away' : 'home';
-        yield from $this->simulateHalf(46, 90);
+        yield from $this->simulateHalf(46, 90, false);
 
         // Full-time
         $this->state->minute = 90;
         $this->state->phase = 'full_time';
         $ftEvents = [$this->buildStructuralEvent('full_time', 'home')];
-        $ftCommentary = $this->commentary->buildMinuteCommentary($ftEvents, $this->state);
+        $ftCommentary = "90' - " . $this->commentary->buildFullTimeCommentary($this->state);
         yield $this->state->toTickArray($ftEvents, $ftCommentary);
     }
 
@@ -355,15 +355,17 @@ class SimulationEngine
     /**
      * Simulate one half of the match (inclusive minute range).
      *
+     * @param bool $isFirstHalf Whether this is the first half (affects kickoff templates)
      * @return \Generator<int, array>
      */
-    private function simulateHalf(int $startMinute, int $endMinute): \Generator
+    private function simulateHalf(int $startMinute, int $endMinute, bool $isFirstHalf): \Generator
     {
         $injuryTime = $startMinute <= 45
             ? $this->state->firstHalfInjuryTime
             : $this->state->secondHalfInjuryTime;
 
         $lastMinute = $endMinute + $injuryTime;
+        $injuryTimeAnnounced = false;
 
         for ($min = $startMinute; $min <= $lastMinute; $min++) {
             $this->state->minute = $min;
@@ -372,10 +374,21 @@ class SimulationEngine
             if ($min === $startMinute) {
                 $this->state->phase = 'kickoff';
                 $events = [$this->buildStructuralEvent('kickoff', $this->state->possession)];
-                $commentaryText = $this->commentary->buildMinuteCommentary($events, $this->state);
+                if ($isFirstHalf) {
+                    $commentaryText = $this->commentary->buildMinuteCommentary($events, $this->state);
+                } else {
+                    // Second half kickoff uses contextual template
+                    $commentaryText = $min . "' - " . $this->commentary->buildEventCommentary(
+                        array_merge($events[0], ['_second_half' => true]),
+                        $this->state
+                    );
+                }
                 yield $this->state->toTickArray($events, $commentaryText);
                 continue;
             }
+
+            // Update narrative tracking
+            $this->state->updateNarrativeTracking();
 
             // Update fatigue for all active players
             $this->updateFatigue();
@@ -395,6 +408,38 @@ class SimulationEngine
             $passCount = random_int(3, 8);
             $this->state->stats[$this->state->possession]['passes'] += $passCount;
 
+            // Injury time announcement (first minute of added time)
+            if ($min === $endMinute + 1 && !$injuryTimeAnnounced) {
+                $injuryTimeAnnounced = true;
+                $announcement = $this->commentary->buildInjuryTimeAnnouncement($injuryTime);
+                $events = $this->simulateMinute();
+
+                // Auto-substitution logic (after minute 60)
+                if ($min >= 60) {
+                    $subEvents = $this->maybeSubstitute();
+                    $events = array_merge($events, $subEvents);
+                }
+
+                $this->updateZoneFromBall();
+                $this->state->phase = $this->resolvePhase($events);
+
+                // Track notable events for narrative
+                $this->trackNotableEvents($events);
+
+                $commentaryText = $this->commentary->buildMinuteCommentary($events, $this->state);
+                // Prepend injury time announcement
+                $prefix = $min . "' - " . $announcement . " ";
+                if (!empty($events)) {
+                    // Replace the minute prefix that buildMinuteCommentary already added
+                    $commentaryText = $prefix . substr($commentaryText, strlen($min . "' - "));
+                } else {
+                    $commentaryText = $prefix . $this->commentary->buildQuietMinuteCommentary($this->state);
+                }
+
+                yield $this->state->toTickArray($events, $commentaryText);
+                continue;
+            }
+
             // Decide what happens
             $events = $this->simulateMinute();
 
@@ -410,10 +455,56 @@ class SimulationEngine
             // Determine phase
             $this->state->phase = $this->resolvePhase($events);
 
+            // Track notable events for narrative
+            $this->trackNotableEvents($events);
+
             // Build commentary
             $commentaryText = $this->commentary->buildMinuteCommentary($events, $this->state);
 
+            // Maybe append color commentary on quiet minutes
+            if (empty($events)) {
+                $color = $this->commentary->buildColorCommentary($this->state);
+                if ($color) {
+                    $commentaryText .= ' ' . $color;
+                }
+            }
+
             yield $this->state->toTickArray($events, $commentaryText);
+        }
+    }
+
+    /**
+     * Track notable events in the narrative state for richer commentary.
+     */
+    private function trackNotableEvents(array $events): void
+    {
+        foreach ($events as $event) {
+            $type = $event['type'] ?? '';
+            $outcome = $event['outcome'] ?? '';
+
+            // Track goals
+            if (($type === 'goal' || $type === 'header' || $type === 'penalty') && $outcome === 'goal') {
+                $playerId = $event['primary_player_id'] ?? 0;
+                $side = $event['team'] ?? 'home';
+                $this->state->recordGoal($playerId, $side);
+            }
+
+            // Track saves
+            if ($type === 'save') {
+                $gkId = $event['primary_player_id'] ?? 0;
+                $this->state->recordSave($gkId);
+            }
+
+            // Track shots
+            if (in_array($type, ['shot_on_target', 'shot_off_target', 'goal', 'header'])) {
+                $playerId = $event['primary_player_id'] ?? 0;
+                $this->state->recordShot($playerId);
+            }
+
+            // Mark notable events (goals, cards, shots on target)
+            if (in_array($type, ['goal', 'header', 'penalty', 'yellow_card', 'red_card', 'shot_on_target', 'save'])) {
+                $this->state->markNotableEvent();
+            }
         }
     }
 

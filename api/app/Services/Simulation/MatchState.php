@@ -115,6 +115,43 @@ class MatchState
      */
     public string $phase = 'kickoff';
 
+    // =========================================================================
+    //  NARRATIVE TRACKING (used by CommentaryBuilder for richer commentary)
+    // =========================================================================
+
+    /** Consecutive minutes the same team has had possession */
+    public int $consecutivePossessionMinutes = 0;
+
+    /** Side that had possession last minute (for tracking streaks) */
+    public string $lastPossessionSide = '';
+
+    /** Minutes since the last notable event (goal, card, shot on target) */
+    public int $minutesSinceLastEvent = 0;
+
+    /** Track per-player in-match saves for "another save" commentary */
+    public array $playerMatchSaves = [];
+
+    /** Track per-player in-match shots for "another chance" commentary */
+    public array $playerMatchShots = [];
+
+    /** Last scorer player ID (for "scores again" commentary) */
+    public ?int $lastScorerId = null;
+
+    /** Minute of last goal (for "quick-fire double" commentary) */
+    public ?int $lastGoalMinute = null;
+
+    /** Side that scored last (for comeback tracking) */
+    public ?string $lastGoalSide = null;
+
+    /** Track score history for comeback detection: [[minute, home, away], ...] */
+    public array $scoreHistory = [];
+
+    /** Number of color commentary lines emitted (to avoid spamming) */
+    public int $colorCommentaryCount = 0;
+
+    /** Last minute a color commentary was emitted */
+    public int $lastColorCommentaryMinute = 0;
+
     /**
      * Get the lineup array for a given side.
      *
@@ -243,6 +280,171 @@ class MatchState
             $this->stats['home']['possession_pct'] = round(($this->homePossessionMinutes / $total) * 100, 1);
             $this->stats['away']['possession_pct'] = round(($this->awayPossessionMinutes / $total) * 100, 1);
         }
+    }
+
+    // =========================================================================
+    //  NARRATIVE HELPERS
+    // =========================================================================
+
+    /**
+     * Update narrative tracking after each minute. Call from SimulationEngine.
+     */
+    public function updateNarrativeTracking(): void
+    {
+        // Consecutive possession
+        if ($this->possession === $this->lastPossessionSide) {
+            $this->consecutivePossessionMinutes++;
+        } else {
+            $this->consecutivePossessionMinutes = 1;
+            $this->lastPossessionSide = $this->possession;
+        }
+
+        $this->minutesSinceLastEvent++;
+    }
+
+    /**
+     * Record that a notable event happened (resets quiet-minute counter).
+     */
+    public function markNotableEvent(): void
+    {
+        $this->minutesSinceLastEvent = 0;
+    }
+
+    /**
+     * Record a goal for narrative tracking.
+     */
+    public function recordGoal(int $playerId, string $side): void
+    {
+        $this->markNotableEvent();
+        $this->scoreHistory[] = [$this->minute, $this->score['home'], $this->score['away']];
+        $this->lastScorerId = $playerId;
+        $this->lastGoalSide = $side;
+        $this->lastGoalMinute = $this->minute;
+    }
+
+    /**
+     * Record a save for narrative tracking.
+     */
+    public function recordSave(int $gkId): void
+    {
+        $this->playerMatchSaves[$gkId] = ($this->playerMatchSaves[$gkId] ?? 0) + 1;
+        $this->markNotableEvent();
+    }
+
+    /**
+     * Record a shot for narrative tracking.
+     */
+    public function recordShot(int $playerId): void
+    {
+        $this->playerMatchShots[$playerId] = ($this->playerMatchShots[$playerId] ?? 0) + 1;
+    }
+
+    /**
+     * Get the goal context for a scoring event.
+     * Returns: 'opener', 'equalizer', 'go_ahead', 'extending', 'consolation', 'comeback'
+     */
+    public function getGoalContext(string $scoringSide): string
+    {
+        $scorerGoals = $this->score[$scoringSide]; // score BEFORE this goal was added
+        $opponentGoals = $this->score[$this->opponent($scoringSide)];
+
+        // First goal of the match
+        if ($scorerGoals === 0 && $opponentGoals === 0) {
+            return 'opener';
+        }
+
+        // Equalizer
+        if ($scorerGoals === $opponentGoals) {
+            return 'equalizer';
+        }
+
+        // Going ahead (was level, now leading)
+        if ($scorerGoals === $opponentGoals - 1) {
+            // After this goal they'll be level — wait, score hasn't been updated yet
+            // Actually: if scorer has N goals and opponent has N goals, after scoring it's N+1 vs N
+            // But score is already updated before commentary is built in some paths
+            // Let's check the actual state
+        }
+
+        // We need to reason about the score AFTER this goal
+        $newScorerGoals = $scorerGoals + 1;
+
+        if ($newScorerGoals === $opponentGoals) {
+            return 'equalizer';
+        }
+
+        if ($newScorerGoals === $opponentGoals + 1 && $scorerGoals <= $opponentGoals) {
+            return 'go_ahead';
+        }
+
+        if ($newScorerGoals > $opponentGoals + 1) {
+            return 'extending';
+        }
+
+        if ($newScorerGoals < $opponentGoals) {
+            return 'consolation';
+        }
+
+        return 'go_ahead';
+    }
+
+    /**
+     * Get a time context label for the current minute.
+     * Returns: 'early', 'first_half', 'second_half', 'late', 'stoppage'
+     */
+    public function getTimeContext(): string
+    {
+        if ($this->minute <= 10) return 'early';
+        if ($this->minute <= 45) return 'first_half';
+        if ($this->minute <= 75) return 'second_half';
+        if ($this->minute <= 90) return 'late';
+        return 'stoppage';
+    }
+
+    /**
+     * Is the match currently tight (within 1 goal)?
+     */
+    public function isTightMatch(): bool
+    {
+        return abs($this->score['home'] - $this->score['away']) <= 1;
+    }
+
+    /**
+     * Is this a high-scoring match (4+ total goals)?
+     */
+    public function isHighScoring(): bool
+    {
+        return ($this->score['home'] + $this->score['away']) >= 4;
+    }
+
+    /**
+     * Which side is dominant in possession?
+     * Returns 'home', 'away', or null if balanced (within 55/45).
+     */
+    public function getDominantSide(): ?string
+    {
+        $homePct = $this->stats['home']['possession_pct'];
+        if ($homePct >= 58) return 'home';
+        if ($homePct <= 42) return 'away';
+        return null;
+    }
+
+    /**
+     * Is this team currently losing?
+     */
+    public function isLosing(string $side): bool
+    {
+        $opp = $this->opponent($side);
+        return $this->score[$side] < $this->score[$opp];
+    }
+
+    /**
+     * Is this team currently winning?
+     */
+    public function isWinning(string $side): bool
+    {
+        $opp = $this->opponent($side);
+        return $this->score[$side] > $this->score[$opp];
     }
 
     /**
