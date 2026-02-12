@@ -536,6 +536,10 @@ export interface SequenceStep {
   duration_ms: number;
   target_id?: number;
   target_name?: string;
+  /** Ball height hint from BE: 'ground' | 'low' | 'high' | 'lofted' */
+  ball_height?: string;
+  /** Intensity hint: 'soft' | 'normal' | 'hard' */
+  intensity?: string;
 }
 
 /** Mirrors `match_lineups` table. */

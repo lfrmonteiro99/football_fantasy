@@ -555,6 +555,16 @@ class MatchState
      */
     public function toTickArray(array $events, string $commentary): array
     {
+        // Build lightweight player position + fatigue snapshots
+        $playerPositions = [];
+        $playerFatigue = [];
+        foreach ($this->playerStates as $playerId => $state) {
+            if ($state['is_sent_off'] || $state['is_subbed_off']) {
+                continue;
+            }
+            $playerFatigue[$playerId] = round($state['fatigue'], 2);
+        }
+
         return [
             'minute' => $this->minute,
             'phase' => $this->phase,
@@ -568,6 +578,7 @@ class MatchState
                 'away' => $this->stats['away'],
             ],
             'commentary' => $commentary,
+            'player_fatigue' => $playerFatigue,
         ];
     }
 }

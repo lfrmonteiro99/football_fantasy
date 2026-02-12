@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import type { BallTrail, EventOverlay } from '../../hooks/useSequencePlayer';
 
 // ---------------------------------------------------------------------------
 // Pitch2D — Pure SVG football pitch
@@ -25,14 +26,28 @@ export interface Pitch2DProps {
   animated?: boolean;
   /** Transition duration in ms — overrides the default 400ms when animated=true. */
   transitionDurationMs?: number;
+  /** Separate ball transition duration when ball speed differs from player speed. */
+  ballTransitionMs?: number;
   onPlayerClick?: (playerId: number) => void;
   className?: string;
   highlightedPlayerId?: number | null;
+  /** Ball height 0-1 for aerial balls; renders shadow + lift. */
+  ballHeight?: number;
+  /** Ball carrier id — renders possession indicator. */
+  ballCarrierId?: number | null;
+  /** Recent ball trails (pass/shot lines). */
+  trails?: BallTrail[];
+  /** Event overlays (goal flash, cards, fouls). */
+  overlays?: EventOverlay[];
+  /** Per-player direction + speed. */
+  directionVectors?: Map<number, { dx: number; dy: number; speed: number }>;
 }
 
 // Map 0-100 coordinate to SVG viewBox units
 const toSvgX = (v: number): number => (v / 100) * 105;
 const toSvgY = (v: number): number => (v / 100) * 68;
+
+const OVERLAY_LIFETIME_MS = 2500;
 
 const Pitch2D: React.FC<Pitch2DProps> = ({
   players = [],
@@ -41,9 +56,15 @@ const Pitch2D: React.FC<Pitch2DProps> = ({
   awayColor = '#ef4444',
   animated = false,
   transitionDurationMs = 400,
+  ballTransitionMs,
   onPlayerClick,
   className = '',
   highlightedPlayerId = null,
+  ballHeight = 0,
+  ballCarrierId = null,
+  trails = [],
+  overlays = [],
+  directionVectors,
 }) => {
   // Pre-compute player SVG positions
   const mappedPlayers = useMemo(
@@ -62,10 +83,25 @@ const Pitch2D: React.FC<Pitch2DProps> = ({
     [ball],
   );
 
-  const transitionSec = (transitionDurationMs / 1000).toFixed(2);
+  const playerTransitionSec = (transitionDurationMs / 1000).toFixed(2);
+  const ballTransitionSec = ((ballTransitionMs ?? transitionDurationMs) / 1000).toFixed(2);
   const transitionCss = animated
-    ? `all ${transitionSec}s ease`
+    ? `all ${playerTransitionSec}s ease`
     : 'none';
+  const ballTransitionCss = animated
+    ? `all ${ballTransitionSec}s ease`
+    : 'none';
+
+  // Filter active overlays
+  const now = Date.now();
+  const activeOverlays = useMemo(
+    () => overlays.filter((o) => now - o.createdAt < OVERLAY_LIFETIME_MS),
+    [overlays, now],
+  );
+
+  // Aerial ball: offset + shadow
+  const ballLift = ballHeight * 4; // max lift in SVG units
+  const ballShadowOpacity = ballHeight * 0.4; // stronger shadow at peak
 
   return (
     <svg
@@ -76,6 +112,20 @@ const Pitch2D: React.FC<Pitch2DProps> = ({
       role="img"
       aria-label="Football pitch"
     >
+      {/* ---- SVG defs (filters, gradients) ---- */}
+      <defs>
+        {/* Goal flash glow */}
+        <radialGradient id="goalFlash" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="#facc15" stopOpacity="0.8" />
+          <stop offset="100%" stopColor="#facc15" stopOpacity="0" />
+        </radialGradient>
+        {/* Ball glow for carrier */}
+        <radialGradient id="ballGlow" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="white" stopOpacity="0.6" />
+          <stop offset="100%" stopColor="white" stopOpacity="0" />
+        </radialGradient>
+      </defs>
+
       {/* ---- Pitch background ---- */}
       <rect x="0" y="0" width="105" height="68" fill="#2d6a2e" rx="1" />
 
@@ -107,16 +157,9 @@ const Pitch2D: React.FC<Pitch2DProps> = ({
         <circle cx="52.5" cy="34" r="0.4" fill="white" />
 
         {/* ---- Left penalty area (home) ---- */}
-        {/* Penalty box: 16.5m deep, 40.3m wide => centered on 68/2=34 */}
         <rect x="0" y={34 - 20.15} width="16.5" height="40.3" />
-
-        {/* Goal area: 5.5m deep, 18.32m wide */}
         <rect x="0" y={34 - 9.16} width="5.5" height="18.32" />
-
-        {/* Penalty spot (11m from goal line) */}
         <circle cx="11" cy="34" r="0.4" fill="white" />
-
-        {/* Penalty arc */}
         <path
           d={`M 16.5 ${34 - 8.7} A 9.15 9.15 0 0 1 16.5 ${34 + 8.7}`}
         />
@@ -140,10 +183,33 @@ const Pitch2D: React.FC<Pitch2DProps> = ({
         <rect x="105" y={34 - 3.66} width="2" height="7.32" stroke="white" strokeWidth="0.2" fill="none" opacity="0.5" />
       </g>
 
+      {/* ---- Ball Trails (pass/shot lines) ---- */}
+      {trails.map((trail, idx) => {
+        const age = now - trail.createdAt;
+        const fade = Math.max(0, 1 - age / 2500);
+        if (fade <= 0) return null;
+        const color = trail.team === 'home' ? homeColor : awayColor;
+        return (
+          <line
+            key={`trail-${idx}`}
+            x1={toSvgX(trail.startX)}
+            y1={toSvgY(trail.startY)}
+            x2={toSvgX(trail.endX)}
+            y2={toSvgY(trail.endY)}
+            stroke={color}
+            strokeWidth="0.3"
+            strokeDasharray="1,0.8"
+            opacity={fade * 0.5}
+          />
+        );
+      })}
+
       {/* ---- Players ---- */}
       {mappedPlayers.map((p) => {
         const color = p.team === 'home' ? homeColor : awayColor;
         const isHighlighted = highlightedPlayerId === p.id;
+        const isCarrier = ballCarrierId === p.id;
+        const dirVec = directionVectors?.get(p.id);
         return (
           <g
             key={p.id}
@@ -172,6 +238,33 @@ const Pitch2D: React.FC<Pitch2DProps> = ({
                   repeatCount="indefinite"
                 />
               </circle>
+            )}
+
+            {/* Ball carrier glow ring */}
+            {isCarrier && (
+              <circle
+                cx={0}
+                cy={0}
+                r={3}
+                fill="url(#ballGlow)"
+                opacity="0.6"
+              />
+            )}
+
+            {/* Direction indicator (movement wedge) */}
+            {dirVec && dirVec.speed > 1.5 && (
+              <polygon
+                points={(() => {
+                  const len = Math.min(dirVec.speed * 0.4, 2.5);
+                  const tipX = dirVec.dx * (2 + len);
+                  const tipY = dirVec.dy * (2 + len);
+                  const perpX = -dirVec.dy * 0.6;
+                  const perpY = dirVec.dx * 0.6;
+                  return `${dirVec.dx * 2 + perpX},${dirVec.dy * 2 + perpY} ${tipX},${tipY} ${dirVec.dx * 2 - perpX},${dirVec.dy * 2 - perpY}`;
+                })()}
+                fill={color}
+                opacity="0.5"
+              />
             )}
 
             {/* Player dot */}
@@ -216,18 +309,119 @@ const Pitch2D: React.FC<Pitch2DProps> = ({
         );
       })}
 
+      {/* ---- Ball Shadow (for aerial balls) ---- */}
+      {ballSvg && ballHeight > 0.05 && (
+        <ellipse
+          cx={ballSvg.x}
+          cy={ballSvg.y + 0.5}
+          rx={1.2 + ballHeight * 0.5}
+          ry={0.5 + ballHeight * 0.2}
+          fill="rgba(0,0,0,0.3)"
+          opacity={ballShadowOpacity}
+          style={{ transition: ballTransitionCss }}
+        />
+      )}
+
       {/* ---- Ball ---- */}
       {ballSvg && (
         <circle
           cx={ballSvg.x}
-          cy={ballSvg.y}
-          r={1.2}
+          cy={ballSvg.y - ballLift}
+          r={1.2 + ballHeight * 0.3}
           fill="white"
           stroke="#222"
           strokeWidth="0.3"
-          style={{ transition: transitionCss }}
+          style={{ transition: ballTransitionCss }}
         />
       )}
+
+      {/* ---- Event Overlays ---- */}
+      {activeOverlays.map((overlay, idx) => {
+        const age = now - overlay.createdAt;
+        const fade = Math.max(0, 1 - age / OVERLAY_LIFETIME_MS);
+        const ox = toSvgX(overlay.x);
+        const oy = toSvgY(overlay.y);
+
+        if (overlay.type === 'goal_flash') {
+          return (
+            <g key={`overlay-${idx}`} opacity={fade}>
+              <circle
+                cx={ox}
+                cy={oy}
+                r={8}
+                fill="url(#goalFlash)"
+              >
+                <animate
+                  attributeName="r"
+                  values="4;10;4"
+                  dur="0.8s"
+                  repeatCount="3"
+                />
+              </circle>
+              <text
+                x={ox}
+                y={oy - 5}
+                textAnchor="middle"
+                fill="#facc15"
+                fontSize="4"
+                fontWeight="bold"
+                fontFamily="sans-serif"
+                opacity={fade}
+              >
+                GOAL!
+              </text>
+            </g>
+          );
+        }
+
+        if (overlay.type === 'yellow_card') {
+          return (
+            <g key={`overlay-${idx}`} opacity={fade}>
+              <rect
+                x={ox - 1}
+                y={oy - 5}
+                width="2"
+                height="3"
+                fill="#facc15"
+                rx="0.3"
+              />
+            </g>
+          );
+        }
+
+        if (overlay.type === 'red_card') {
+          return (
+            <g key={`overlay-${idx}`} opacity={fade}>
+              <rect
+                x={ox - 1}
+                y={oy - 5}
+                width="2"
+                height="3"
+                fill="#ef4444"
+                rx="0.3"
+              />
+            </g>
+          );
+        }
+
+        if (overlay.type === 'foul_marker') {
+          return (
+            <g key={`overlay-${idx}`} opacity={fade * 0.7}>
+              <circle
+                cx={ox}
+                cy={oy}
+                r={2}
+                fill="none"
+                stroke="#f59e0b"
+                strokeWidth="0.4"
+                strokeDasharray="0.8,0.4"
+              />
+            </g>
+          );
+        }
+
+        return null;
+      })}
     </svg>
   );
 };

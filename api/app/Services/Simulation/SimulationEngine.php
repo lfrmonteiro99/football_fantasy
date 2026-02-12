@@ -2605,9 +2605,10 @@ class SimulationEngine
         Player $actor,
         array $ballStart,
         array $ballEnd,
-        int $durationMs
+        int $durationMs,
+        array $extra = []
     ): array {
-        return [
+        $step = [
             'action' => $action,
             'actor_id' => $actor->id,
             'actor_name' => $actor->first_name . ' ' . $actor->last_name,
@@ -2615,6 +2616,38 @@ class SimulationEngine
             'ball_end' => $ballEnd,
             'duration_ms' => $durationMs,
         ];
+
+        // Infer ball_height from action if not provided
+        if (!isset($extra['ball_height'])) {
+            $d = sqrt(
+                pow(($ballEnd['x'] ?? 0) - ($ballStart['x'] ?? 0), 2) +
+                pow(($ballEnd['y'] ?? 0) - ($ballStart['y'] ?? 0), 2)
+            );
+            if (in_array($action, ['cross', 'clearance'])) {
+                $step['ball_height'] = 'high';
+            } elseif ($action === 'header') {
+                $step['ball_height'] = 'high';
+            } elseif ($action === 'shoot') {
+                $step['ball_height'] = 'low';
+            } elseif ($action === 'pass' && $d > 25) {
+                $step['ball_height'] = 'lofted';
+            } else {
+                $step['ball_height'] = 'ground';
+            }
+        }
+
+        // Infer intensity from action if not provided
+        if (!isset($extra['intensity'])) {
+            if (in_array($action, ['shoot', 'clearance'])) {
+                $step['intensity'] = 'hard';
+            } elseif (in_array($action, ['dribble', 'run'])) {
+                $step['intensity'] = 'soft';
+            } else {
+                $step['intensity'] = 'normal';
+            }
+        }
+
+        return array_merge($step, $extra);
     }
 
     // =========================================================================
