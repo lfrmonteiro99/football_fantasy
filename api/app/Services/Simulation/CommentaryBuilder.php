@@ -116,6 +116,14 @@ class CommentaryBuilder
         "Unstoppable header! {player} bullies the defenders and nods it in for {team}!",
     ];
 
+    private const HEADER_OFF_TARGET_TEMPLATES = [
+        "{player} heads it wide from the set piece. Close, but no cigar.",
+        "The header from {player} drifts just over the crossbar.",
+        "{player} gets his head on it but can't direct it on target.",
+        "{player} rises well but the header goes just wide of the post.",
+        "Off target! {player}'s header misses by inches.",
+    ];
+
     private const GOAL_PENALTY_TEMPLATES = [
         "GOAL! {player} converts the penalty! Cool as you like for {team}!",
         "{player} sends the keeper the wrong way from the spot! {team} score the penalty!",
@@ -193,6 +201,14 @@ class CommentaryBuilder
         ],
     ];
 
+    private const SAVE_CLAIMED_TEMPLATES = [
+        "{gk} comes out to claim the ball confidently.",
+        "{gk} gathers the cross comfortably. No danger.",
+        "Claimed by {gk}. He made that look easy.",
+        "{gk} plucks the ball out of the air. Good handling.",
+        "Safe hands from {gk}. He claims the delivery.",
+    ];
+
     // =========================================================================
     //  PENALTY MISS TEMPLATES
     // =========================================================================
@@ -257,10 +273,10 @@ class CommentaryBuilder
     ];
 
     private const FOUL_DANGEROUS_TEMPLATES = [
-        "{player} brings down {player2} in a dangerous position. Free kick to {team} in a great area.",
-        "Cynical foul from {player} on {player2}. {team} have a free kick in a threatening position.",
-        "{player} stops {player2} in his tracks, right on the edge of the area. Dangerous free kick for {team}.",
-        "Professional foul from {player} on {player2}! {team} will fancy this free kick.",
+        "{player} brings down {player2} in a dangerous position. Free kick to {opp_team} in a great area.",
+        "Cynical foul from {player} on {player2}. {opp_team} have a free kick in a threatening position.",
+        "{player} stops {player2} in his tracks, right on the edge of the area. Dangerous free kick for {opp_team}.",
+        "Professional foul from {player} on {player2}! {opp_team} will fancy this free kick.",
     ];
 
     // =========================================================================
@@ -334,6 +350,14 @@ class CommentaryBuilder
         "{player} swings in a deep cross towards the back post.",
         "{player} clips a lovely ball into the danger zone.",
         "In it comes from {player}! A teasing cross into the six-yard box.",
+    ];
+
+    private const POSSESSION_TEMPLATES = [
+        "{team} work the ball forward through the middle.",
+        "{team} build patiently from the back.",
+        "Good passing from {team} as they advance up the pitch.",
+        "{team} move the ball nicely through the lines.",
+        "Possession football from {team}. They're in no rush.",
     ];
 
     private const DRIBBLE_TEMPLATES = [
@@ -599,15 +623,23 @@ class CommentaryBuilder
 
         $replacements = $this->buildReplacements($event, $state, $teamName);
 
+        $outcome = $event['outcome'] ?? '';
+
         // Route to specialized builders for key events
         return match (true) {
             $this->isGoalEvent($event) => $this->buildGoalCommentary($event, $state, $replacements),
-            $type === 'header' && ($event['outcome'] ?? '') === 'goal'
+            $type === 'header' && $outcome === 'goal'
                 => $this->applyReplacements($this->pickRandom(self::GOAL_HEADER_TEMPLATES), $replacements),
-            $type === 'penalty' && ($event['outcome'] ?? '') === 'goal'
+            $type === 'header' && $outcome === 'saved'
+                => $this->applyReplacements($this->pickRandom(self::SHOT_ON_TARGET_TEMPLATES), $replacements),
+            $type === 'header' && $outcome === 'wide'
+                => $this->applyReplacements($this->pickRandom(self::HEADER_OFF_TARGET_TEMPLATES), $replacements),
+            $type === 'penalty' && $outcome === 'goal'
                 => $this->applyReplacements($this->pickRandom(self::GOAL_PENALTY_TEMPLATES), $replacements),
-            $type === 'penalty' && ($event['outcome'] ?? '') === 'saved'
+            $type === 'penalty' && $outcome === 'saved'
                 => $this->applyReplacements($this->pickRandom(self::PENALTY_MISS_TEMPLATES), $replacements),
+            $type === 'save' && $outcome === 'claimed'
+                => $this->applyReplacements($this->pickRandom(self::SAVE_CLAIMED_TEMPLATES), $replacements),
             $type === 'save' => $this->buildSaveCommentary($event, $state, $replacements),
             default => $this->buildStandardCommentary($event, $state, $replacements),
         };
@@ -960,6 +992,7 @@ class CommentaryBuilder
             'dribble' => self::DRIBBLE_TEMPLATES,
             'pass' => self::PASS_TEMPLATES,
             'through_ball' => self::THROUGH_BALL_TEMPLATES,
+            'possession' => self::POSSESSION_TEMPLATES,
             'throw_in' => self::THROW_IN_TEMPLATES,
             'goal_kick' => self::GOAL_KICK_TEMPLATES,
             'substitution' => self::SUBSTITUTION_TEMPLATES,
@@ -1061,10 +1094,15 @@ class CommentaryBuilder
     {
         $type = $event['type'];
 
+        // {opp_team} is the opposing team (useful for fouls where {team} is the fouler)
+        $oppSide = $state->opponent($teamSide ?: 'home');
+        $oppTeamName = $this->getTeamName($oppSide, $state);
+
         $replacements = [
             '{player}' => $event['primary_player_name'] ?? 'A player',
             '{player2}' => $event['secondary_player_name'] ?? 'a teammate',
             '{team}' => $teamName,
+            '{opp_team}' => $oppTeamName,
             '{gk}' => '',
             '{minute}' => (string) $state->minute,
             '{home_team}' => $state->homeTeam->name ?? 'Home',
@@ -1081,7 +1119,9 @@ class CommentaryBuilder
                 // For saves, the primary player IS the GK
                 $replacements['{gk}'] = $event['primary_player_name'] ?? 'the goalkeeper';
                 // {player} in save templates refers to the shooter (secondary)
-                $replacements['{player}'] = $event['secondary_player_name'] ?? 'the attacker';
+                // If no secondary player (e.g. corner claim), just credit the GK
+                $shooter = $event['secondary_player_name'] ?? null;
+                $replacements['{player}'] = $shooter ?: 'the attacker';
             } else {
                 $opposingSide = $state->opponent($event['team'] ?? 'home');
                 $gk = $state->getGoalkeeper($opposingSide);
