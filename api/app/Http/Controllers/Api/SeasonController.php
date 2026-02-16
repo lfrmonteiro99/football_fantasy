@@ -12,6 +12,22 @@ class SeasonController extends Controller
     /**
      * Get all seasons.
      *
+     * @OA\Get(
+     *     path="/seasons",
+     *     operationId="getSeasons",
+     *     tags={"Seasons"},
+     *     summary="List all seasons",
+     *     description="Returns all seasons ordered by start date descending.",
+     *     @OA\Response(
+     *         response=200,
+     *         description="Successful operation",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="status", type="string", example="success"),
+     *             @OA\Property(property="data", type="array", @OA\Items(type="object"))
+     *         )
+     *     )
+     * )
+     *
      * @return JsonResponse
      */
     public function index(): JsonResponse
@@ -26,6 +42,30 @@ class SeasonController extends Controller
 
     /**
      * Get a specific season.
+     *
+     * @OA\Get(
+     *     path="/seasons/{id}",
+     *     operationId="getSeason",
+     *     tags={"Seasons"},
+     *     summary="Get a specific season",
+     *     description="Returns a single season with its associated matches.",
+     *     @OA\Parameter(
+     *         name="id",
+     *         in="path",
+     *         required=true,
+     *         description="Season ID",
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Successful operation",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="status", type="string", example="success"),
+     *             @OA\Property(property="data", type="object")
+     *         )
+     *     ),
+     *     @OA\Response(response=404, description="Season not found")
+     * )
      *
      * @param int $id
      * @return JsonResponse
@@ -42,6 +82,30 @@ class SeasonController extends Controller
 
     /**
      * Get the current season.
+     *
+     * @OA\Get(
+     *     path="/seasons/current",
+     *     operationId="getCurrentSeason",
+     *     tags={"Seasons"},
+     *     summary="Get the current active season",
+     *     description="Returns the season that is marked as current. Returns 404 if no current season is set.",
+     *     @OA\Response(
+     *         response=200,
+     *         description="Successful operation",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="status", type="string", example="success"),
+     *             @OA\Property(property="data", type="object")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=404,
+     *         description="No current season found",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="status", type="string", example="error"),
+     *             @OA\Property(property="message", type="string", example="No current season found")
+     *         )
+     *     )
+     * )
      *
      * @return JsonResponse
      */

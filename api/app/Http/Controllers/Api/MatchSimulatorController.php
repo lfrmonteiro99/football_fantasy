@@ -24,7 +24,73 @@ class MatchSimulatorController extends Controller
     }
 
     /**
-     * Simulate a match between two teams
+     * Simulate a match between two teams.
+     *
+     * @OA\Post(
+     *     path="/simulator/simulate",
+     *     summary="Simulate a match between two teams",
+     *     description="Runs a full match simulation synchronously using the provided teams, tactics, weather, and options. Returns the complete match result.",
+     *     operationId="simulatorSimulateMatch",
+     *     tags={"Simulator"},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"home_team_id", "away_team_id"},
+     *             @OA\Property(property="home_team_id", type="integer", example=1, description="ID of the home team"),
+     *             @OA\Property(property="away_team_id", type="integer", example=2, description="ID of the away team"),
+     *             @OA\Property(property="home_tactic_id", type="integer", nullable=true, example=1, description="ID of the home team tactic"),
+     *             @OA\Property(property="away_tactic_id", type="integer", nullable=true, example=2, description="ID of the away team tactic"),
+     *             @OA\Property(property="weather", type="string", enum={"normal", "rainy", "snowy", "windy"}, nullable=true, default="normal", description="Weather condition for the match"),
+     *             @OA\Property(property="stadium", type="string", nullable=true, example="Estadio da Luz", description="Stadium name"),
+     *             @OA\Property(
+     *                 property="options",
+     *                 type="object",
+     *                 nullable=true,
+     *                 description="Simulation options",
+     *                 @OA\Property(property="tickRate", type="integer", minimum=1, maximum=120, example=60),
+     *                 @OA\Property(property="enableCommentary", type="boolean", example=true),
+     *                 @OA\Property(property="enableStatistics", type="boolean", example=true),
+     *                 @OA\Property(property="enableFatigue", type="boolean", example=true),
+     *                 @OA\Property(property="enableMomentum", type="boolean", example=true),
+     *                 @OA\Property(property="enableWeather", type="boolean", example=false)
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Match simulation result",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="data", type="object", description="Full match result data")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=422,
+     *         description="Validation failed",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Validation failed"),
+     *             @OA\Property(property="errors", type="object")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=500,
+     *         description="Simulation failed",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Match simulation failed"),
+     *             @OA\Property(property="error", type="string")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=503,
+     *         description="Simulator service unavailable",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Match simulator service is unavailable")
+     *         )
+     *     )
+     * )
      */
     public function simulateMatch(Request $request): JsonResponse
     {
@@ -110,7 +176,61 @@ class MatchSimulatorController extends Controller
     }
 
     /**
-     * Simulate a match in real-time mode
+     * Simulate a match in real-time mode.
+     *
+     * @OA\Post(
+     *     path="/simulator/simulate-realtime",
+     *     summary="Simulate a match in real-time mode",
+     *     description="Runs a match simulation with real-time settings enabled (commentary, statistics, fatigue, and momentum). Returns the complete match result.",
+     *     operationId="simulateRealTimeMatch",
+     *     tags={"Simulator"},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"home_team_id", "away_team_id"},
+     *             @OA\Property(property="home_team_id", type="integer", example=1, description="ID of the home team"),
+     *             @OA\Property(property="away_team_id", type="integer", example=2, description="ID of the away team"),
+     *             @OA\Property(property="home_tactic_id", type="integer", nullable=true, example=1, description="ID of the home team tactic"),
+     *             @OA\Property(property="away_tactic_id", type="integer", nullable=true, example=2, description="ID of the away team tactic"),
+     *             @OA\Property(property="weather", type="string", enum={"normal", "rainy", "snowy", "windy"}, nullable=true, default="normal", description="Weather condition for the match"),
+     *             @OA\Property(property="stadium", type="string", nullable=true, example="Estadio da Luz", description="Stadium name")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Real-time match simulation result",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="data", type="object", description="Full match result data including final_score")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=422,
+     *         description="Validation failed",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Validation failed"),
+     *             @OA\Property(property="errors", type="object")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=500,
+     *         description="Simulation failed",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Real-time match simulation failed"),
+     *             @OA\Property(property="error", type="string")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=503,
+     *         description="Simulator service unavailable",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Match simulator service is unavailable")
+     *         )
+     *     )
+     * )
      */
     public function simulateRealTimeMatch(Request $request): JsonResponse
     {
@@ -199,7 +319,28 @@ class MatchSimulatorController extends Controller
     }
 
     /**
-     * Check simulator service health
+     * Check simulator service health.
+     *
+     * @OA\Get(
+     *     path="/simulator/health",
+     *     summary="Check simulator service health",
+     *     description="Returns the current health status of the match simulator service along with a timestamp.",
+     *     operationId="simulatorHealth",
+     *     tags={"Simulator"},
+     *     @OA\Response(
+     *         response=200,
+     *         description="Health status",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(
+     *                 property="data",
+     *                 type="object",
+     *                 @OA\Property(property="simulator_healthy", type="boolean", example=true),
+     *                 @OA\Property(property="timestamp", type="string", format="date-time", example="2026-02-16T12:00:00.000000Z")
+     *             )
+     *         )
+     *     )
+     * )
      */
     public function health(): JsonResponse
     {
@@ -227,7 +368,69 @@ class MatchSimulatorController extends Controller
     }
 
     /**
-     * Simulate a match with streaming updates
+     * Simulate a match with streaming updates.
+     *
+     * @OA\Post(
+     *     path="/simulator/simulate-streaming",
+     *     summary="Simulate a match with streaming updates",
+     *     description="Starts a match simulation with streaming updates. If the server is under high load (max concurrent simulations reached), the simulation is queued and a 202 response is returned with a queue position. Otherwise, the simulation streams immediately with a 200 response.",
+     *     operationId="simulateStreamingMatch",
+     *     tags={"Simulator"},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"home_team_id", "away_team_id"},
+     *             @OA\Property(property="home_team_id", type="integer", example=1, description="ID of the home team"),
+     *             @OA\Property(property="away_team_id", type="integer", example=2, description="ID of the away team"),
+     *             @OA\Property(property="home_tactic_id", type="integer", nullable=true, example=1, description="ID of the home team tactic"),
+     *             @OA\Property(property="away_tactic_id", type="integer", nullable=true, example=2, description="ID of the away team tactic"),
+     *             @OA\Property(property="weather", type="string", enum={"normal", "rainy", "snowy", "windy"}, nullable=true, default="normal", description="Weather condition for the match"),
+     *             @OA\Property(property="stadium", type="string", nullable=true, example="Estadio da Luz", description="Stadium name"),
+     *             @OA\Property(property="options", type="object", nullable=true, description="Simulation options")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Streaming simulation started immediately"
+     *     ),
+     *     @OA\Response(
+     *         response=202,
+     *         description="Simulation queued due to high server load",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="message", type="string", example="Simulation queued due to high load"),
+     *             @OA\Property(property="simulation_id", type="string"),
+     *             @OA\Property(property="estimated_wait_time", type="integer", description="Estimated wait in seconds", example=270),
+     *             @OA\Property(property="queue_position", type="integer", example=4)
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=422,
+     *         description="Validation failed",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Validation failed"),
+     *             @OA\Property(property="errors", type="object")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=500,
+     *         description="Simulation failed",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Streaming match simulation failed"),
+     *             @OA\Property(property="error", type="string")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=503,
+     *         description="Simulator service unavailable",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Match simulator service is unavailable")
+     *         )
+     *     )
+     * )
      */
     public function simulateStreamingMatch(Request $request)
     {
@@ -297,7 +500,7 @@ class MatchSimulatorController extends Controller
             // Check system load and decide on execution strategy
             $concurrentSimulations = $this->simulatorService->getConcurrentSimulationsCount();
             $maxConcurrent = config('services.match_simulator.max_concurrent', 3);
-            
+
             if ($concurrentSimulations >= $maxConcurrent) {
                 // Queue the simulation for later processing
                 $simulationId = $this->simulatorService->queueSimulation(
@@ -307,7 +510,7 @@ class MatchSimulatorController extends Controller
                     $awayTactic,
                     $options
                 );
-                
+
                 return response()->json([
                     'success' => true,
                     'message' => 'Simulation queued due to high load',
@@ -342,7 +545,62 @@ class MatchSimulatorController extends Controller
     }
 
     /**
-     * Start async match simulation using RabbitMQ
+     * Start async match simulation using RabbitMQ.
+     *
+     * @OA\Post(
+     *     path="/simulator/simulate-async",
+     *     summary="Start an asynchronous match simulation",
+     *     description="Queues a match simulation job via RabbitMQ for background processing. Returns immediately with a job ID and status URL for polling.",
+     *     operationId="simulateMatchAsync",
+     *     tags={"Simulator"},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"home_team_id", "away_team_id"},
+     *             @OA\Property(property="home_team_id", type="integer", example=1, description="ID of the home team"),
+     *             @OA\Property(property="away_team_id", type="integer", example=2, description="ID of the away team"),
+     *             @OA\Property(property="home_tactic_id", type="integer", nullable=true, example=1, description="ID of the home team tactic"),
+     *             @OA\Property(property="away_tactic_id", type="integer", nullable=true, example=2, description="ID of the away team tactic"),
+     *             @OA\Property(property="weather", type="string", enum={"normal", "rainy", "snowy", "windy"}, nullable=true, default="normal", description="Weather condition for the match"),
+     *             @OA\Property(property="stadium", type="string", nullable=true, example="Estadio da Luz", description="Stadium name"),
+     *             @OA\Property(property="options", type="object", nullable=true, description="Simulation options")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=202,
+     *         description="Simulation job accepted and queued",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="message", type="string", example="Match simulation started"),
+     *             @OA\Property(
+     *                 property="data",
+     *                 type="object",
+     *                 @OA\Property(property="job_id", type="string", format="uuid", example="550e8400-e29b-41d4-a716-446655440000"),
+     *                 @OA\Property(property="status", type="string", example="queued"),
+     *                 @OA\Property(property="estimated_duration", type="string", example="90-120 seconds"),
+     *                 @OA\Property(property="status_url", type="string", format="uri", example="http://localhost:8000/api/v1/simulator/status/550e8400-e29b-41d4-a716-446655440000")
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=422,
+     *         description="Validation failed",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Validation failed"),
+     *             @OA\Property(property="errors", type="object")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=500,
+     *         description="Failed to queue simulation",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Failed to start match simulation"),
+     *             @OA\Property(property="error", type="string")
+     *         )
+     *     )
+     * )
      */
     public function simulateMatchAsync(Request $request): JsonResponse
     {
@@ -451,7 +709,56 @@ class MatchSimulatorController extends Controller
     }
 
     /**
-     * Get simulation job status
+     * Get simulation job status.
+     *
+     * @OA\Get(
+     *     path="/simulator/status/{jobId}",
+     *     summary="Get the status of an async simulation job",
+     *     description="Retrieves the current status and progress of a previously queued simulation job by its UUID.",
+     *     operationId="getSimulationStatus",
+     *     tags={"Simulator"},
+     *     @OA\Parameter(
+     *         name="jobId",
+     *         in="path",
+     *         required=true,
+     *         description="UUID of the simulation job",
+     *         @OA\Schema(type="string", format="uuid", example="550e8400-e29b-41d4-a716-446655440000")
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Job status retrieved",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(
+     *                 property="data",
+     *                 type="object",
+     *                 @OA\Property(property="job_id", type="string", format="uuid"),
+     *                 @OA\Property(property="user_id", type="integer"),
+     *                 @OA\Property(property="status", type="string", example="queued", description="One of: queued, processing, completed, failed"),
+     *                 @OA\Property(property="message", type="string"),
+     *                 @OA\Property(property="progress", type="integer", example=0),
+     *                 @OA\Property(property="timestamp", type="string", format="date-time"),
+     *                 @OA\Property(property="match_data", type="object")
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=404,
+     *         description="Simulation job not found",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Simulation job not found")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=500,
+     *         description="Failed to retrieve status",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Failed to get simulation status")
+     *         )
+     *     )
+     * )
      */
     public function getSimulationStatus(string $jobId): JsonResponse
     {
@@ -484,14 +791,42 @@ class MatchSimulatorController extends Controller
     }
 
     /**
-     * Stream simulation updates via Server-Sent Events
+     * Stream simulation updates via Server-Sent Events.
+     *
+     * @OA\Get(
+     *     path="/simulator/stream/{jobId}",
+     *     summary="Stream simulation updates via Server-Sent Events",
+     *     description="Opens an SSE connection to receive real-time updates for an async simulation job. Events emitted: connected, status (progress updates), heartbeat (every 5s), finished (completed/failed), timeout (after 5 minutes).",
+     *     operationId="streamSimulationUpdates",
+     *     tags={"Simulator"},
+     *     @OA\Parameter(
+     *         name="jobId",
+     *         in="path",
+     *         required=true,
+     *         description="UUID of the simulation job to stream updates for",
+     *         @OA\Schema(type="string", format="uuid", example="550e8400-e29b-41d4-a716-446655440000")
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="SSE stream (text/event-stream). Named events: connected (initial handshake), status (job progress updates), heartbeat (keep-alive every 5s), finished (simulation completed or failed), timeout (stream timed out after 5 minutes)."
+     *     ),
+     *     @OA\Response(
+     *         response=500,
+     *         description="Failed to start event stream",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Failed to start event stream"),
+     *             @OA\Property(property="error", type="string")
+     *         )
+     *     )
+     * )
      */
     public function streamSimulationUpdates(string $jobId)
     {
         try {
             // Set unlimited execution time for SSE stream
             set_time_limit(0);
-            
+
             // Set headers for SSE
             $headers = [
                 'Content-Type' => 'text/event-stream',
@@ -522,7 +857,7 @@ class MatchSimulatorController extends Controller
                         echo "data: " . json_encode($status) . "\n\n";
                         ob_flush();
                         flush();
-                        
+
                         $lastStatus = $status;
 
                         // If job is completed or failed, send final event and close
@@ -575,7 +910,49 @@ class MatchSimulatorController extends Controller
     }
 
     /**
-     * Get available simulation options
+     * Get available simulation options.
+     *
+     * @OA\Get(
+     *     path="/simulator/options",
+     *     summary="Get available simulation options",
+     *     description="Returns the available weather options, default simulation options, and performance limits.",
+     *     operationId="getSimulatorOptions",
+     *     tags={"Simulator"},
+     *     @OA\Response(
+     *         response=200,
+     *         description="Available simulation options",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(
+     *                 property="data",
+     *                 type="object",
+     *                 @OA\Property(
+     *                     property="weather_options",
+     *                     type="array",
+     *                     @OA\Items(type="string"),
+     *                     example={"normal", "rainy", "snowy", "windy"}
+     *                 ),
+     *                 @OA\Property(
+     *                     property="default_options",
+     *                     type="object",
+     *                     @OA\Property(property="tickRate", type="integer", example=60),
+     *                     @OA\Property(property="enableCommentary", type="boolean", example=true),
+     *                     @OA\Property(property="enableStatistics", type="boolean", example=true),
+     *                     @OA\Property(property="enableFatigue", type="boolean", example=true),
+     *                     @OA\Property(property="enableMomentum", type="boolean", example=true),
+     *                     @OA\Property(property="enableWeather", type="boolean", example=false)
+     *                 ),
+     *                 @OA\Property(
+     *                     property="performance_limits",
+     *                     type="object",
+     *                     @OA\Property(property="max_tick_rate", type="integer", example=120),
+     *                     @OA\Property(property="max_duration", type="integer", example=7200),
+     *                     @OA\Property(property="max_concurrent_simulations", type="integer", example=10)
+     *                 )
+     *             )
+     *         )
+     *     )
+     * )
      */
     public function getOptions(): JsonResponse
     {
@@ -599,4 +976,4 @@ class MatchSimulatorController extends Controller
             ]
         ]);
     }
-} 
+}

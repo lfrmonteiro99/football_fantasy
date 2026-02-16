@@ -10,7 +10,43 @@ use Illuminate\Http\JsonResponse;
 class FormationController extends Controller
 {
     /**
-     * Display a listing of formations.
+     * @OA\Get(
+     *     path="/formations",
+     *     summary="List all formations",
+     *     description="Retrieve a list of formations, optionally filtered by style and active status. Includes tactics count for each formation.",
+     *     operationId="getFormations",
+     *     tags={"Formations"},
+     *     @OA\Parameter(
+     *         name="style",
+     *         in="query",
+     *         required=false,
+     *         description="Filter formations by tactical style",
+     *         @OA\Schema(type="string", enum={"defensive", "balanced", "attacking"})
+     *     ),
+     *     @OA\Parameter(
+     *         name="is_active",
+     *         in="query",
+     *         required=false,
+     *         description="Filter formations by active status",
+     *         @OA\Schema(type="boolean")
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Formations retrieved successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="data", type="array", @OA\Items(
+     *                 @OA\Property(property="id", type="integer"),
+     *                 @OA\Property(property="name", type="string", example="4-3-3"),
+     *                 @OA\Property(property="display_name", type="string"),
+     *                 @OA\Property(property="style", type="string", enum={"defensive", "balanced", "attacking"}),
+     *                 @OA\Property(property="is_active", type="boolean"),
+     *                 @OA\Property(property="tactics_count", type="integer")
+     *             )),
+     *             @OA\Property(property="message", type="string", example="Formations retrieved successfully")
+     *         )
+     *     )
+     * )
      */
     public function index(Request $request): JsonResponse
     {
@@ -39,7 +75,57 @@ class FormationController extends Controller
     }
 
     /**
-     * Store a newly created formation.
+     * @OA\Post(
+     *     path="/formations",
+     *     summary="Create a new formation",
+     *     description="Store a newly created formation. Defenders, midfielders, and forwards must total 10 outfield players.",
+     *     operationId="storeFormation",
+     *     tags={"Formations"},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"name", "display_name", "positions", "style", "defenders_count", "midfielders_count", "forwards_count"},
+     *             @OA\Property(property="name", type="string", maxLength=20, example="4-3-3"),
+     *             @OA\Property(property="display_name", type="string", maxLength=100, example="4-3-3 Attacking"),
+     *             @OA\Property(property="description", type="string", maxLength=500, nullable=true),
+     *             @OA\Property(property="positions", type="array", minItems=11, maxItems=11,
+     *                 @OA\Items(
+     *                     @OA\Property(property="x", type="integer", minimum=0, maximum=100),
+     *                     @OA\Property(property="y", type="integer", minimum=0, maximum=100),
+     *                     @OA\Property(property="position", type="string", maxLength=3, example="CB")
+     *                 )
+     *             ),
+     *             @OA\Property(property="style", type="string", enum={"defensive", "balanced", "attacking"}),
+     *             @OA\Property(property="defenders_count", type="integer", minimum=3, maximum=6),
+     *             @OA\Property(property="midfielders_count", type="integer", minimum=2, maximum=6),
+     *             @OA\Property(property="forwards_count", type="integer", minimum=1, maximum=4),
+     *             @OA\Property(property="is_active", type="boolean")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=201,
+     *         description="Formation created successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="data", type="object",
+     *                 @OA\Property(property="id", type="integer"),
+     *                 @OA\Property(property="name", type="string"),
+     *                 @OA\Property(property="display_name", type="string"),
+     *                 @OA\Property(property="style", type="string"),
+     *                 @OA\Property(property="is_active", type="boolean")
+     *             ),
+     *             @OA\Property(property="message", type="string", example="Formation created successfully")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=422,
+     *         description="Validation error (e.g. defenders + midfielders + forwards must total 10)",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Defenders, midfielders, and forwards must total 10 players")
+     *         )
+     *     )
+     * )
      */
     public function store(Request $request): JsonResponse
     {
@@ -77,7 +163,39 @@ class FormationController extends Controller
     }
 
     /**
-     * Display the specified formation.
+     * @OA\Get(
+     *     path="/formations/{formation}",
+     *     summary="Get a specific formation",
+     *     description="Retrieve a single formation by ID, including its associated tactics.",
+     *     operationId="showFormation",
+     *     tags={"Formations"},
+     *     @OA\Parameter(
+     *         name="formation",
+     *         in="path",
+     *         required=true,
+     *         description="Formation ID",
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Formation retrieved successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="data", type="object",
+     *                 @OA\Property(property="id", type="integer"),
+     *                 @OA\Property(property="name", type="string"),
+     *                 @OA\Property(property="display_name", type="string"),
+     *                 @OA\Property(property="style", type="string"),
+     *                 @OA\Property(property="tactics", type="array", @OA\Items(type="object"))
+     *             ),
+     *             @OA\Property(property="message", type="string", example="Formation retrieved successfully")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=404,
+     *         description="Formation not found"
+     *     )
+     * )
      */
     public function show(Formation $formation): JsonResponse
     {
@@ -91,7 +209,57 @@ class FormationController extends Controller
     }
 
     /**
-     * Update the specified formation.
+     * @OA\Put(
+     *     path="/formations/{formation}",
+     *     summary="Update a formation",
+     *     description="Update an existing formation. All fields are optional (uses 'sometimes' validation). If position counts are updated, they must still total 10.",
+     *     operationId="updateFormation",
+     *     tags={"Formations"},
+     *     @OA\Parameter(
+     *         name="formation",
+     *         in="path",
+     *         required=true,
+     *         description="Formation ID",
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             @OA\Property(property="name", type="string", maxLength=20),
+     *             @OA\Property(property="display_name", type="string", maxLength=100),
+     *             @OA\Property(property="description", type="string", maxLength=500, nullable=true),
+     *             @OA\Property(property="positions", type="array", minItems=11, maxItems=11,
+     *                 @OA\Items(
+     *                     @OA\Property(property="x", type="integer", minimum=0, maximum=100),
+     *                     @OA\Property(property="y", type="integer", minimum=0, maximum=100),
+     *                     @OA\Property(property="position", type="string", maxLength=3)
+     *                 )
+     *             ),
+     *             @OA\Property(property="style", type="string", enum={"defensive", "balanced", "attacking"}),
+     *             @OA\Property(property="defenders_count", type="integer", minimum=3, maximum=6),
+     *             @OA\Property(property="midfielders_count", type="integer", minimum=2, maximum=6),
+     *             @OA\Property(property="forwards_count", type="integer", minimum=1, maximum=4),
+     *             @OA\Property(property="is_active", type="boolean")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Formation updated successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="data", type="object"),
+     *             @OA\Property(property="message", type="string", example="Formation updated successfully")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=404,
+     *         description="Formation not found"
+     *     ),
+     *     @OA\Response(
+     *         response=422,
+     *         description="Validation error"
+     *     )
+     * )
      */
     public function update(Request $request, Formation $formation): JsonResponse
     {
@@ -115,7 +283,7 @@ class FormationController extends Controller
             $defendersCount = $validated['defenders_count'] ?? $formation->defenders_count;
             $midfieldersCount = $validated['midfielders_count'] ?? $formation->midfielders_count;
             $forwardsCount = $validated['forwards_count'] ?? $formation->forwards_count;
-            
+
             $totalOutfield = $defendersCount + $midfieldersCount + $forwardsCount;
             if ($totalOutfield !== 10) {
                 return response()->json([
@@ -135,7 +303,32 @@ class FormationController extends Controller
     }
 
     /**
-     * Remove the specified formation.
+     * @OA\Delete(
+     *     path="/formations/{formation}",
+     *     summary="Delete a formation",
+     *     description="Remove the specified formation from the system.",
+     *     operationId="destroyFormation",
+     *     tags={"Formations"},
+     *     @OA\Parameter(
+     *         name="formation",
+     *         in="path",
+     *         required=true,
+     *         description="Formation ID",
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Formation deleted successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="message", type="string", example="Formation deleted successfully")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=404,
+     *         description="Formation not found"
+     *     )
+     * )
      */
     public function destroy(Formation $formation): JsonResponse
     {
@@ -148,7 +341,26 @@ class FormationController extends Controller
     }
 
     /**
-     * Get formations grouped by style.
+     * @OA\Get(
+     *     path="/formations/style/grouped",
+     *     summary="Get formations grouped by style",
+     *     description="Retrieve all active formations grouped by their tactical style (defensive, balanced, attacking).",
+     *     operationId="getFormationsGroupedByStyle",
+     *     tags={"Formations"},
+     *     @OA\Response(
+     *         response=200,
+     *         description="Formations grouped by style retrieved successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="data", type="object",
+     *                 @OA\Property(property="defensive", type="array", @OA\Items(type="object")),
+     *                 @OA\Property(property="balanced", type="array", @OA\Items(type="object")),
+     *                 @OA\Property(property="attacking", type="array", @OA\Items(type="object"))
+     *             ),
+     *             @OA\Property(property="message", type="string", example="Formations grouped by style retrieved successfully")
+     *         )
+     *     )
+     * )
      */
     public function byStyle(): JsonResponse
     {
@@ -164,7 +376,50 @@ class FormationController extends Controller
     }
 
     /**
-     * Get formation visualization data.
+     * @OA\Get(
+     *     path="/formations/{formation}/visualization",
+     *     summary="Get formation visualization data",
+     *     description="Retrieve visualization data for a formation including field positions, tactical setup lines (defensive, midfield, attacking), and width analysis (left flank, center, right flank).",
+     *     operationId="getFormationVisualization",
+     *     tags={"Formations"},
+     *     @OA\Parameter(
+     *         name="formation",
+     *         in="path",
+     *         required=true,
+     *         description="Formation ID",
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Formation visualization data retrieved successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="data", type="object",
+     *                 @OA\Property(property="formation", type="object"),
+     *                 @OA\Property(property="field_positions", type="array", @OA\Items(
+     *                     @OA\Property(property="x", type="integer"),
+     *                     @OA\Property(property="y", type="integer"),
+     *                     @OA\Property(property="position", type="string")
+     *                 )),
+     *                 @OA\Property(property="tactical_setup", type="object",
+     *                     @OA\Property(property="defensive_line", type="number"),
+     *                     @OA\Property(property="midfield_line", type="number"),
+     *                     @OA\Property(property="attacking_line", type="number")
+     *                 ),
+     *                 @OA\Property(property="width_analysis", type="object",
+     *                     @OA\Property(property="left_flank", type="integer"),
+     *                     @OA\Property(property="center", type="integer"),
+     *                     @OA\Property(property="right_flank", type="integer")
+     *                 )
+     *             ),
+     *             @OA\Property(property="message", type="string", example="Formation visualization data retrieved successfully")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=404,
+     *         description="Formation not found"
+     *     )
+     * )
      */
     public function visualization(Formation $formation): JsonResponse
     {
@@ -189,9 +444,44 @@ class FormationController extends Controller
             'message' => 'Formation visualization data retrieved successfully'
         ]);
     }
-    
+
     /**
-     * Get sample tactical instructions for a formation.
+     * @OA\Get(
+     *     path="/formations/{formation}/sample-instructions",
+     *     summary="Get sample tactical instructions for a formation",
+     *     description="Retrieve sample tactical instructions associated with a formation, including the formation's basic info and whether sample instructions are available.",
+     *     operationId="getFormationSampleInstructions",
+     *     tags={"Formations"},
+     *     @OA\Parameter(
+     *         name="formation",
+     *         in="path",
+     *         required=true,
+     *         description="Formation ID",
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Formation sample instructions retrieved successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="data", type="object",
+     *                 @OA\Property(property="formation", type="object",
+     *                     @OA\Property(property="id", type="integer"),
+     *                     @OA\Property(property="name", type="string"),
+     *                     @OA\Property(property="display_name", type="string"),
+     *                     @OA\Property(property="style", type="string")
+     *                 ),
+     *                 @OA\Property(property="sample_instructions", type="object"),
+     *                 @OA\Property(property="has_sample_instructions", type="boolean")
+     *             ),
+     *             @OA\Property(property="message", type="string", example="Formation sample instructions retrieved successfully")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=404,
+     *         description="Formation not found"
+     *     )
+     * )
      */
     public function sampleInstructions(Formation $formation): JsonResponse
     {

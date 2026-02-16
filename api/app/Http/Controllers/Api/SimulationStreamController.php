@@ -24,6 +24,39 @@ class SimulationStreamController extends Controller
      * Stream a real-time match simulation via Server-Sent Events.
      *
      * POST /api/v1/matches/{match}/simulate-stream?speed=fast
+     *
+     * @OA\Post(
+     *     path="/matches/{match}/simulate-stream",
+     *     summary="Stream a match simulation via Server-Sent Events",
+     *     description="Runs a tick-based match simulation and streams minute-by-minute updates as SSE named events. Events emitted: lineup, minute, goal, card, half_time, full_time, error. After the simulation completes, results are persisted to the database.",
+     *     operationId="simulateStream",
+     *     tags={"Simulation"},
+     *     @OA\Parameter(
+     *         name="match",
+     *         in="path",
+     *         required=true,
+     *         description="The match ID to simulate",
+     *         @OA\Schema(type="integer", example=1)
+     *     ),
+     *     @OA\Parameter(
+     *         name="speed",
+     *         in="query",
+     *         required=false,
+     *         description="Simulation playback speed controlling delay between ticks",
+     *         @OA\Schema(type="string", enum={"realtime", "fast", "instant"}, default="fast")
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="SSE stream (text/event-stream). Named events: lineup (team lineups), minute (tick data with events, score, stats), goal (scorer and score), card (yellow/red card detail), half_time (half-time score and stats), full_time (final score and stats), error (error details)."
+     *     ),
+     *     @OA\Response(
+     *         response=422,
+     *         description="Match is not ready for simulation (missing teams, formations, or players)",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="message", type="string", example="Match must have both a home team and an away team assigned.")
+     *         )
+     *     )
+     * )
      */
     public function simulateStream(Request $request, GameMatch $match): StreamedResponse
     {
@@ -140,6 +173,63 @@ class SimulationStreamController extends Controller
      * Run the full simulation and return a single JSON response.
      *
      * GET /api/v1/matches/{match}/simulate-instant
+     *
+     * @OA\Get(
+     *     path="/matches/{match}/simulate-instant",
+     *     summary="Run a full match simulation and return the result as JSON",
+     *     description="Executes the entire tick-based match simulation synchronously and returns the complete result including lineups, all minute ticks, final score, and full-time statistics. Results are persisted to the database.",
+     *     operationId="simulateInstant",
+     *     tags={"Simulation"},
+     *     @OA\Parameter(
+     *         name="match",
+     *         in="path",
+     *         required=true,
+     *         description="The match ID to simulate",
+     *         @OA\Schema(type="integer", example=1)
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Complete simulation result",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="match_id", type="integer", example=1),
+     *             @OA\Property(
+     *                 property="lineups",
+     *                 type="object",
+     *                 @OA\Property(
+     *                     property="home",
+     *                     type="object",
+     *                     @OA\Property(property="team_name", type="string", example="FC Porto"),
+     *                     @OA\Property(property="formation", type="string", example="4-3-3"),
+     *                     @OA\Property(property="starting", type="array", @OA\Items(type="object")),
+     *                     @OA\Property(property="subs", type="array", @OA\Items(type="object"))
+     *                 ),
+     *                 @OA\Property(
+     *                     property="away",
+     *                     type="object",
+     *                     @OA\Property(property="team_name", type="string", example="SL Benfica"),
+     *                     @OA\Property(property="formation", type="string", example="4-4-2"),
+     *                     @OA\Property(property="starting", type="array", @OA\Items(type="object")),
+     *                     @OA\Property(property="subs", type="array", @OA\Items(type="object"))
+     *                 )
+     *             ),
+     *             @OA\Property(property="minutes", type="array", @OA\Items(type="object", description="Tick data for each simulated minute")),
+     *             @OA\Property(
+     *                 property="final_score",
+     *                 type="object",
+     *                 @OA\Property(property="home", type="integer", example=2),
+     *                 @OA\Property(property="away", type="integer", example=1)
+     *             ),
+     *             @OA\Property(property="full_time_stats", type="object", description="Aggregated match statistics for both teams")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=422,
+     *         description="Match is not ready for simulation (missing teams, formations, or players)",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="message", type="string", example="Match must have both a home team and an away team assigned.")
+     *         )
+     *     )
+     * )
      */
     public function simulateInstant(Request $request, GameMatch $match): JsonResponse
     {

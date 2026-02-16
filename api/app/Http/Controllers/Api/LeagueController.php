@@ -13,6 +13,44 @@ class LeagueController extends Controller
 {
     /**
      * Display a listing of leagues.
+     *
+     * @OA\Get(
+     *     path="/leagues",
+     *     operationId="getLeagues",
+     *     tags={"Leagues"},
+     *     summary="List all leagues",
+     *     description="Returns a paginated list of leagues, optionally filtered by country or level.",
+     *     @OA\Parameter(
+     *         name="country",
+     *         in="query",
+     *         required=false,
+     *         description="Filter leagues by country",
+     *         @OA\Schema(type="string")
+     *     ),
+     *     @OA\Parameter(
+     *         name="level",
+     *         in="query",
+     *         required=false,
+     *         description="Filter leagues by level",
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\Parameter(
+     *         name="per_page",
+     *         in="query",
+     *         required=false,
+     *         description="Number of results per page (default: 15)",
+     *         @OA\Schema(type="integer", default=15)
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Leagues retrieved successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="data", type="object"),
+     *             @OA\Property(property="message", type="string", example="Leagues retrieved successfully")
+     *         )
+     *     )
+     * )
      */
     public function index(Request $request): JsonResponse
     {
@@ -42,6 +80,38 @@ class LeagueController extends Controller
 
     /**
      * Store a newly created league.
+     *
+     * @OA\Post(
+     *     path="/leagues",
+     *     operationId="createLeague",
+     *     tags={"Leagues"},
+     *     summary="Create a new league",
+     *     description="Creates a new league with the provided details.",
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"name", "country", "level", "max_teams", "reputation"},
+     *             @OA\Property(property="name", type="string", maxLength=255, example="Premier League"),
+     *             @OA\Property(property="country", type="string", maxLength=100, example="England"),
+     *             @OA\Property(property="level", type="integer", minimum=1, maximum=10, example=1),
+     *             @OA\Property(property="max_teams", type="integer", minimum=8, maximum=30, example=20),
+     *             @OA\Property(property="reputation", type="number", minimum=1, maximum=10, example=9.5)
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=201,
+     *         description="League created successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="data", type="object"),
+     *             @OA\Property(property="message", type="string", example="League created successfully")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=422,
+     *         description="Validation error"
+     *     )
+     * )
      */
     public function store(Request $request): JsonResponse
     {
@@ -64,6 +134,34 @@ class LeagueController extends Controller
 
     /**
      * Display the specified league.
+     *
+     * @OA\Get(
+     *     path="/leagues/{league}",
+     *     operationId="getLeague",
+     *     tags={"Leagues"},
+     *     summary="Get a specific league",
+     *     description="Returns a single league with its teams and players.",
+     *     @OA\Parameter(
+     *         name="league",
+     *         in="path",
+     *         required=true,
+     *         description="League ID",
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="League retrieved successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="data", type="object"),
+     *             @OA\Property(property="message", type="string", example="League retrieved successfully")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=404,
+     *         description="League not found"
+     *     )
+     * )
      */
     public function show(League $league): JsonResponse
     {
@@ -78,6 +176,48 @@ class LeagueController extends Controller
 
     /**
      * Update the specified league.
+     *
+     * @OA\Put(
+     *     path="/leagues/{league}",
+     *     operationId="updateLeague",
+     *     tags={"Leagues"},
+     *     summary="Update an existing league",
+     *     description="Updates a league with the provided fields. All fields are optional.",
+     *     @OA\Parameter(
+     *         name="league",
+     *         in="path",
+     *         required=true,
+     *         description="League ID",
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\RequestBody(
+     *         required=false,
+     *         @OA\JsonContent(
+     *             @OA\Property(property="name", type="string", maxLength=255, example="Premier League"),
+     *             @OA\Property(property="country", type="string", maxLength=100, example="England"),
+     *             @OA\Property(property="level", type="integer", minimum=1, maximum=10, example=1),
+     *             @OA\Property(property="max_teams", type="integer", minimum=8, maximum=30, example=20),
+     *             @OA\Property(property="reputation", type="number", minimum=1, maximum=10, example=9.5)
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="League updated successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="data", type="object"),
+     *             @OA\Property(property="message", type="string", example="League updated successfully")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=404,
+     *         description="League not found"
+     *     ),
+     *     @OA\Response(
+     *         response=422,
+     *         description="Validation error"
+     *     )
+     * )
      */
     public function update(Request $request, League $league): JsonResponse
     {
@@ -100,6 +240,33 @@ class LeagueController extends Controller
 
     /**
      * Remove the specified league.
+     *
+     * @OA\Delete(
+     *     path="/leagues/{league}",
+     *     operationId="deleteLeague",
+     *     tags={"Leagues"},
+     *     summary="Delete a league",
+     *     description="Permanently deletes the specified league.",
+     *     @OA\Parameter(
+     *         name="league",
+     *         in="path",
+     *         required=true,
+     *         description="League ID",
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="League deleted successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="message", type="string", example="League deleted successfully")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=404,
+     *         description="League not found"
+     *     )
+     * )
      */
     public function destroy(League $league): JsonResponse
     {
@@ -113,6 +280,58 @@ class LeagueController extends Controller
 
     /**
      * Get league standings/table.
+     *
+     * @OA\Get(
+     *     path="/leagues/{league}/standings",
+     *     operationId="getLeagueStandings",
+     *     tags={"Leagues"},
+     *     summary="Get league standings",
+     *     description="Returns the league table computed from completed match results, sorted by points, goal difference, and goals for. Includes last 5 match form for each team.",
+     *     @OA\Parameter(
+     *         name="league",
+     *         in="path",
+     *         required=true,
+     *         description="League ID",
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="League standings retrieved successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="league", type="object",
+     *                 @OA\Property(property="id", type="integer", example=1),
+     *                 @OA\Property(property="name", type="string", example="Liga Portugal"),
+     *                 @OA\Property(property="country", type="string", nullable=true, example="Portugal")
+     *             ),
+     *             @OA\Property(property="standings", type="array",
+     *                 @OA\Items(type="object",
+     *                     @OA\Property(property="position", type="integer", example=1),
+     *                     @OA\Property(property="team", type="object",
+     *                         @OA\Property(property="id", type="integer", example=1),
+     *                         @OA\Property(property="name", type="string", example="SL Benfica"),
+     *                         @OA\Property(property="short_name", type="string", example="BEN"),
+     *                         @OA\Property(property="primary_color", type="string", nullable=true, example="#FF0000"),
+     *                         @OA\Property(property="secondary_color", type="string", nullable=true, example="#FFFFFF")
+     *                     ),
+     *                     @OA\Property(property="played", type="integer", example=10),
+     *                     @OA\Property(property="won", type="integer", example=7),
+     *                     @OA\Property(property="drawn", type="integer", example=2),
+     *                     @OA\Property(property="lost", type="integer", example=1),
+     *                     @OA\Property(property="goals_for", type="integer", example=22),
+     *                     @OA\Property(property="goals_against", type="integer", example=8),
+     *                     @OA\Property(property="goal_difference", type="integer", example=14),
+     *                     @OA\Property(property="points", type="integer", example=23),
+     *                     @OA\Property(property="form", type="array", @OA\Items(type="string", enum={"W","D","L"}), example={"W","W","D","W","L"})
+     *                 )
+     *             ),
+     *             @OA\Property(property="matches_played", type="integer", example=45)
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=404,
+     *         description="League not found"
+     *     )
+     * )
      */
     public function standings(League $league): JsonResponse
     {
@@ -220,6 +439,32 @@ class LeagueController extends Controller
 
     /**
      * Get overview stats for all leagues.
+     *
+     * @OA\Get(
+     *     path="/stats/overview",
+     *     operationId="getStatsOverview",
+     *     tags={"Stats"},
+     *     summary="Get overview stats for all leagues",
+     *     description="Returns aggregate statistics for every league including team counts, match progress, total goals, and average goals per match.",
+     *     @OA\Response(
+     *         response=200,
+     *         description="Overview stats retrieved successfully",
+     *         @OA\JsonContent(
+     *             type="array",
+     *             @OA\Items(type="object",
+     *                 @OA\Property(property="league", type="object",
+     *                     @OA\Property(property="id", type="integer", example=1),
+     *                     @OA\Property(property="name", type="string", example="Liga Portugal")
+     *                 ),
+     *                 @OA\Property(property="teams_count", type="integer", example=18),
+     *                 @OA\Property(property="matches_completed", type="integer", example=45),
+     *                 @OA\Property(property="matches_total", type="integer", example=306),
+     *                 @OA\Property(property="total_goals", type="integer", example=120),
+     *                 @OA\Property(property="avg_goals_per_match", type="number", format="float", example=2.67)
+     *             )
+     *         )
+     *     )
+     * )
      */
     public function overview(): JsonResponse
     {

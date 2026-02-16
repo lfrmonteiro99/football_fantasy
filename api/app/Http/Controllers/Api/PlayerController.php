@@ -14,6 +14,34 @@ class PlayerController extends Controller
 {
     /**
      * Display a listing of players.
+     *
+     * @OA\Get(
+     *     path="/players",
+     *     operationId="listPlayers",
+     *     tags={"Players"},
+     *     summary="List all players with optional filters",
+     *     description="Returns a paginated list of players. Supports filtering by team, position, nationality, name search, age range, and market value range.",
+     *     @OA\Parameter(name="team_id", in="query", description="Filter by team ID", required=false, @OA\Schema(type="integer")),
+     *     @OA\Parameter(name="position_id", in="query", description="Filter by primary position ID", required=false, @OA\Schema(type="integer")),
+     *     @OA\Parameter(name="nationality", in="query", description="Filter by nationality", required=false, @OA\Schema(type="string")),
+     *     @OA\Parameter(name="search", in="query", description="Search by first or last name", required=false, @OA\Schema(type="string")),
+     *     @OA\Parameter(name="min_age", in="query", description="Minimum player age", required=false, @OA\Schema(type="integer")),
+     *     @OA\Parameter(name="max_age", in="query", description="Maximum player age", required=false, @OA\Schema(type="integer")),
+     *     @OA\Parameter(name="min_value", in="query", description="Minimum market value", required=false, @OA\Schema(type="number")),
+     *     @OA\Parameter(name="max_value", in="query", description="Maximum market value", required=false, @OA\Schema(type="number")),
+     *     @OA\Parameter(name="sort_by", in="query", description="Sort field (default: market_value)", required=false, @OA\Schema(type="string", enum={"market_value", "rating", "first_name", "last_name"})),
+     *     @OA\Parameter(name="sort_order", in="query", description="Sort direction (default: desc)", required=false, @OA\Schema(type="string", enum={"asc", "desc"})),
+     *     @OA\Parameter(name="per_page", in="query", description="Results per page (default: 15)", required=false, @OA\Schema(type="integer")),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Paginated list of players retrieved successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="data", type="object", description="Paginated player data"),
+     *             @OA\Property(property="message", type="string", example="Players retrieved successfully")
+     *         )
+     *     )
+     * )
      */
     public function index(Request $request): JsonResponse
     {
@@ -61,7 +89,7 @@ class PlayerController extends Controller
         // Sort options
         $sortBy = $request->get('sort_by', 'market_value');
         $sortOrder = $request->get('sort_order', 'desc');
-        
+
         if ($sortBy === 'rating') {
             $query->join('player_attributes', 'players.id', '=', 'player_attributes.player_id')
                   ->orderBy('player_attributes.current_ability', $sortOrder);
@@ -80,6 +108,54 @@ class PlayerController extends Controller
 
     /**
      * Store a newly created player.
+     *
+     * @OA\Post(
+     *     path="/players",
+     *     operationId="createPlayer",
+     *     tags={"Players"},
+     *     summary="Create a new player",
+     *     description="Creates a new player with the provided details. Validates shirt number uniqueness within the team.",
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"first_name", "last_name", "date_of_birth", "nationality", "preferred_foot", "height_cm", "weight_kg", "primary_position_id", "market_value", "wage_per_week"},
+     *             @OA\Property(property="first_name", type="string", maxLength=100, example="Cristiano"),
+     *             @OA\Property(property="last_name", type="string", maxLength=100, example="Ronaldo"),
+     *             @OA\Property(property="date_of_birth", type="string", format="date", example="1985-02-05"),
+     *             @OA\Property(property="nationality", type="string", maxLength=100, example="Portuguese"),
+     *             @OA\Property(property="preferred_foot", type="string", enum={"left", "right", "both"}, example="right"),
+     *             @OA\Property(property="height_cm", type="integer", minimum=140, maximum=220, example=187),
+     *             @OA\Property(property="weight_kg", type="integer", minimum=40, maximum=150, example=83),
+     *             @OA\Property(property="team_id", type="integer", nullable=true, description="Team ID (null for free agent)", example=1),
+     *             @OA\Property(property="primary_position_id", type="integer", description="Primary position ID", example=10),
+     *             @OA\Property(property="secondary_positions", type="array", @OA\Items(type="integer"), nullable=true, description="Array of secondary position IDs"),
+     *             @OA\Property(property="market_value", type="number", minimum=0, example=75000000),
+     *             @OA\Property(property="wage_per_week", type="number", minimum=0, example=500000),
+     *             @OA\Property(property="contract_start", type="string", format="date", nullable=true, example="2024-01-01"),
+     *             @OA\Property(property="contract_end", type="string", format="date", nullable=true, example="2026-06-30"),
+     *             @OA\Property(property="shirt_number", type="integer", minimum=1, maximum=99, nullable=true, example=7),
+     *             @OA\Property(property="is_injured", type="boolean", example=false),
+     *             @OA\Property(property="injury_return_date", type="string", format="date", nullable=true)
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=201,
+     *         description="Player created successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="data", type="object", description="Created player with team and position"),
+     *             @OA\Property(property="message", type="string", example="Player created successfully")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=422,
+     *         description="Validation error or shirt number already taken",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Shirt number already taken by another player in this team")
+     *         )
+     *     )
+     * )
      */
     public function store(Request $request): JsonResponse
     {
@@ -109,7 +185,7 @@ class PlayerController extends Controller
             $existingPlayer = Player::where('team_id', $validated['team_id'])
                 ->where('shirt_number', $validated['shirt_number'])
                 ->first();
-            
+
             if ($existingPlayer) {
                 return response()->json([
                     'success' => false,
@@ -130,6 +206,34 @@ class PlayerController extends Controller
 
     /**
      * Display the specified player.
+     *
+     * @OA\Get(
+     *     path="/players/{player}",
+     *     operationId="getPlayer",
+     *     tags={"Players"},
+     *     summary="Get a specific player",
+     *     description="Returns a single player with team, position, attributes, and tactical position relationships.",
+     *     @OA\Parameter(
+     *         name="player",
+     *         in="path",
+     *         description="Player ID",
+     *         required=true,
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Player retrieved successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="data", type="object", description="Player with team, position, attributes, and tactical positions"),
+     *             @OA\Property(property="message", type="string", example="Player retrieved successfully")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=404,
+     *         description="Player not found"
+     *     )
+     * )
      */
     public function show(Player $player): JsonResponse
     {
@@ -149,6 +253,64 @@ class PlayerController extends Controller
 
     /**
      * Update the specified player.
+     *
+     * @OA\Put(
+     *     path="/players/{player}",
+     *     operationId="updatePlayer",
+     *     tags={"Players"},
+     *     summary="Update an existing player",
+     *     description="Updates a player's details. All fields are optional (uses 'sometimes' validation). Validates shirt number uniqueness within the team.",
+     *     @OA\Parameter(
+     *         name="player",
+     *         in="path",
+     *         description="Player ID",
+     *         required=true,
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             @OA\Property(property="first_name", type="string", maxLength=100),
+     *             @OA\Property(property="last_name", type="string", maxLength=100),
+     *             @OA\Property(property="date_of_birth", type="string", format="date"),
+     *             @OA\Property(property="nationality", type="string", maxLength=100),
+     *             @OA\Property(property="preferred_foot", type="string", enum={"left", "right", "both"}),
+     *             @OA\Property(property="height_cm", type="integer", minimum=140, maximum=220),
+     *             @OA\Property(property="weight_kg", type="integer", minimum=40, maximum=150),
+     *             @OA\Property(property="team_id", type="integer", nullable=true),
+     *             @OA\Property(property="primary_position_id", type="integer"),
+     *             @OA\Property(property="secondary_positions", type="array", @OA\Items(type="integer"), nullable=true),
+     *             @OA\Property(property="market_value", type="number", minimum=0),
+     *             @OA\Property(property="wage_per_week", type="number", minimum=0),
+     *             @OA\Property(property="contract_start", type="string", format="date", nullable=true),
+     *             @OA\Property(property="contract_end", type="string", format="date", nullable=true),
+     *             @OA\Property(property="shirt_number", type="integer", minimum=1, maximum=99, nullable=true),
+     *             @OA\Property(property="is_injured", type="boolean"),
+     *             @OA\Property(property="injury_return_date", type="string", format="date", nullable=true)
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Player updated successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="data", type="object", description="Updated player with team, position, and attributes"),
+     *             @OA\Property(property="message", type="string", example="Player updated successfully")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=404,
+     *         description="Player not found"
+     *     ),
+     *     @OA\Response(
+     *         response=422,
+     *         description="Validation error or shirt number already taken",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Shirt number already taken by another player in this team")
+     *         )
+     *     )
+     * )
      */
     public function update(Request $request, Player $player): JsonResponse
     {
@@ -179,7 +341,7 @@ class PlayerController extends Controller
                 ->where('shirt_number', $validated['shirt_number'])
                 ->where('id', '!=', $player->id)
                 ->first();
-            
+
             if ($existingPlayer) {
                 return response()->json([
                     'success' => false,
@@ -200,6 +362,33 @@ class PlayerController extends Controller
 
     /**
      * Remove the specified player.
+     *
+     * @OA\Delete(
+     *     path="/players/{player}",
+     *     operationId="deletePlayer",
+     *     tags={"Players"},
+     *     summary="Delete a player",
+     *     description="Permanently deletes a player from the system.",
+     *     @OA\Parameter(
+     *         name="player",
+     *         in="path",
+     *         description="Player ID",
+     *         required=true,
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Player deleted successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="message", type="string", example="Player deleted successfully")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=404,
+     *         description="Player not found"
+     *     )
+     * )
      */
     public function destroy(Player $player): JsonResponse
     {
@@ -213,11 +402,53 @@ class PlayerController extends Controller
 
     /**
      * Get player attributes in detail.
+     *
+     * @OA\Get(
+     *     path="/players/{player}/attributes",
+     *     operationId="getPlayerAttributes",
+     *     tags={"Players"},
+     *     summary="Get detailed player attributes",
+     *     description="Returns the player's attributes grouped into technical, mental, physical, and goalkeeping categories, along with overall ability ratings.",
+     *     @OA\Parameter(
+     *         name="player",
+     *         in="path",
+     *         description="Player ID",
+     *         required=true,
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Player attributes retrieved successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="data", type="object",
+     *                 @OA\Property(property="player", type="object", description="Player with primary position"),
+     *                 @OA\Property(property="overall_ratings", type="object",
+     *                     @OA\Property(property="current_ability", type="number", example=15.5),
+     *                     @OA\Property(property="potential_ability", type="number", example=18.0)
+     *                 ),
+     *                 @OA\Property(property="technical", type="object", description="Technical attributes (finishing, first_touch, free_kick_taking, heading, long_shots, passing, technique, dribbling)"),
+     *                 @OA\Property(property="mental", type="object", description="Mental attributes (aggression, anticipation, composure, concentration, decisions, determination, leadership, positioning, teamwork, vision, work_rate)"),
+     *                 @OA\Property(property="physical", type="object", description="Physical attributes (acceleration, agility, balance, jumping_reach, natural_fitness, pace, stamina, strength)"),
+     *                 @OA\Property(property="goalkeeping", type="object", description="Goalkeeping attributes (aerial_reach, command_of_area, handling, kicking, one_on_ones, reflexes, rushing_out, throwing)")
+     *             ),
+     *             @OA\Property(property="message", type="string", example="Player attributes retrieved successfully")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=404,
+     *         description="Player or attributes not found",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Player attributes not found")
+     *         )
+     *     )
+     * )
      */
     public function attributes(Player $player): JsonResponse
     {
         $attributes = $player->attributes;
-        
+
         if (!$attributes) {
             return response()->json([
                 'success' => false,
@@ -291,6 +522,62 @@ class PlayerController extends Controller
 
     /**
      * Transfer player to another team.
+     *
+     * @OA\Post(
+     *     path="/players/{player}/transfer",
+     *     operationId="transferPlayer",
+     *     tags={"Players"},
+     *     summary="Transfer a player to another team",
+     *     description="Transfers a player to a new team, updating their contract details, wage, and shirt number. Validates shirt number availability in the destination team.",
+     *     @OA\Parameter(
+     *         name="player",
+     *         in="path",
+     *         description="Player ID",
+     *         required=true,
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"new_team_id", "transfer_fee", "new_wage", "contract_length_years"},
+     *             @OA\Property(property="new_team_id", type="integer", description="Destination team ID", example=2),
+     *             @OA\Property(property="transfer_fee", type="number", minimum=0, description="Transfer fee amount", example=50000000),
+     *             @OA\Property(property="new_wage", type="number", minimum=0, description="New weekly wage", example=300000),
+     *             @OA\Property(property="contract_length_years", type="integer", minimum=1, maximum=10, description="Contract duration in years", example=4),
+     *             @OA\Property(property="shirt_number", type="integer", minimum=1, maximum=99, nullable=true, description="Shirt number at new team", example=9)
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Player transferred successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="data", type="object",
+     *                 @OA\Property(property="player", type="object", description="Updated player with new team and position"),
+     *                 @OA\Property(property="transfer_details", type="object",
+     *                     @OA\Property(property="from_team", type="string", example="SL Benfica"),
+     *                     @OA\Property(property="to_team", type="string", example="FC Porto"),
+     *                     @OA\Property(property="transfer_fee", type="number", example=50000000),
+     *                     @OA\Property(property="new_wage", type="number", example=300000),
+     *                     @OA\Property(property="contract_length", type="string", example="4 years")
+     *                 )
+     *             ),
+     *             @OA\Property(property="message", type="string", example="Player transferred successfully")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=404,
+     *         description="Player or destination team not found"
+     *     ),
+     *     @OA\Response(
+     *         response=422,
+     *         description="Validation error or shirt number already taken in new team",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Shirt number already taken in the new team")
+     *         )
+     *     )
+     * )
      */
     public function transfer(Request $request, Player $player): JsonResponse
     {
@@ -310,7 +597,7 @@ class PlayerController extends Controller
             $existingPlayer = Player::where('team_id', $validated['new_team_id'])
                 ->where('shirt_number', $validated['shirt_number'])
                 ->first();
-            
+
             if ($existingPlayer) {
                 return response()->json([
                     'success' => false,
@@ -348,6 +635,45 @@ class PlayerController extends Controller
 
     /**
      * Get players by position.
+     *
+     * @OA\Get(
+     *     path="/positions/{position}/players",
+     *     operationId="getPlayersByPosition",
+     *     tags={"Players"},
+     *     summary="Get all players for a specific position",
+     *     description="Returns a list of players whose primary position matches the given position, ordered by market value descending.",
+     *     @OA\Parameter(
+     *         name="position",
+     *         in="path",
+     *         description="Position ID",
+     *         required=true,
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Players retrieved successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="data", type="object",
+     *                 @OA\Property(property="position", type="object", description="Position details"),
+     *                 @OA\Property(property="players", type="array", @OA\Items(type="object",
+     *                     @OA\Property(property="id", type="integer"),
+     *                     @OA\Property(property="full_name", type="string"),
+     *                     @OA\Property(property="team", type="object"),
+     *                     @OA\Property(property="age", type="integer"),
+     *                     @OA\Property(property="nationality", type="string"),
+     *                     @OA\Property(property="market_value", type="number"),
+     *                     @OA\Property(property="current_ability", type="number")
+     *                 ))
+     *             ),
+     *             @OA\Property(property="message", type="string", example="Players retrieved successfully")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=404,
+     *         description="Position not found"
+     *     )
+     * )
      */
     public function byPosition(Position $position): JsonResponse
     {
