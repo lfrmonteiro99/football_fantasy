@@ -1,0 +1,34 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicoulaj/tauri-schema/refs/heads/main/schema/tauri-conf-2.schema.json",
+  "productName": "Football Fantasy",
+  "version": "0.1.0",
+  "identifier": "com.footballfantasy.mobile",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Football Fantasy Manager",
+        "width": 390,
+        "height": 844,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/icon.png"
+    ]
+  }
+}

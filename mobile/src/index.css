@@ -1,0 +1,109 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+  }
+
+  html, body, #root {
+    height: 100%;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    overscroll-behavior: none;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    background-color: #0d1421;
+    color: #f0f3f8;
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
+  }
+
+  /* Hide all scrollbars */
+  *::-webkit-scrollbar { display: none; }
+  * { -ms-overflow-style: none; scrollbar-width: none; }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl;
+  }
+
+  .glass-card-light {
+    @apply bg-white/10 backdrop-blur-sm border border-white/15 rounded-xl;
+  }
+
+  .nav-item-active {
+    @apply text-brand-400;
+  }
+
+  .nav-item-inactive {
+    @apply text-navy-400;
+  }
+
+  .stat-pill {
+    @apply px-2 py-0.5 rounded-full text-xs font-semibold;
+  }
+
+  .form-badge-w {
+    @apply bg-brand-500/20 text-brand-400 stat-pill;
+  }
+  .form-badge-d {
+    @apply bg-accent-500/20 text-accent-400 stat-pill;
+  }
+  .form-badge-l {
+    @apply bg-red-500/20 text-red-400 stat-pill;
+  }
+
+  .mobile-btn {
+    @apply flex items-center justify-center font-semibold rounded-xl
+           active:scale-95 transition-all duration-150;
+  }
+
+  .mobile-btn-primary {
+    @apply mobile-btn bg-brand-600 text-white h-11 px-6;
+  }
+
+  .mobile-btn-secondary {
+    @apply mobile-btn bg-white/10 text-white h-10 px-5;
+  }
+
+  .mobile-btn-ghost {
+    @apply mobile-btn bg-transparent text-navy-300 h-10 px-4;
+  }
+
+  .page-container {
+    @apply flex flex-col h-full pt-safe-top pb-nav overflow-hidden;
+  }
+
+  .page-header {
+    @apply flex items-center justify-between px-4 h-12 flex-shrink-0;
+  }
+
+  .page-title {
+    @apply text-lg font-bold text-white;
+  }
+
+  .page-body {
+    @apply flex-1 overflow-hidden px-4;
+  }
+
+  .segment-control {
+    @apply flex bg-white/5 rounded-xl p-0.5 gap-0.5;
+  }
+
+  .segment-item {
+    @apply flex-1 py-1.5 text-center text-xs font-semibold rounded-lg transition-all;
+  }
+
+  .segment-item-active {
+    @apply segment-item bg-brand-600 text-white shadow-lg;
+  }
+
+  .segment-item-inactive {
+    @apply segment-item text-navy-400;
+  }
+}
